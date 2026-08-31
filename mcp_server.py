@@ -30,6 +30,8 @@ from mcp.server.transport_security import TransportSecuritySettings
 from agent import root_agent
 from common import ContextKey
 from utils.browser_session import BROWSER_SESSION
+from utils.mobile_capabilities import discover_mobile_capabilities
+from utils.mobile_session import MOBILE_SESSION
 from utils.report_store import (
     REPORT_FILE_SPECS,
     build_report_manifest,
@@ -357,6 +359,44 @@ async def run_full_test(
     )
     bridge_result = await bridge.run_turn(prompt, clear_report_artifact=True)
     return _build_run_full_test_result(bridge_result)
+
+
+@mcp.tool()
+async def get_test_capabilities() -> dict[str, Any]:
+    """Return locally visible test capabilities."""
+    return {"capabilities": discover_mobile_capabilities()}
+
+
+@mcp.tool(structured_output=False)
+async def run_mobile_connection_test(
+    capability_id: str,
+    app_package: str | None = None,
+    app_activity: str | None = None,
+) -> mcp_types.CallToolResult:
+    """Connect to a local mobile capability and return a raw tree plus screenshot."""
+    try:
+        await MOBILE_SESSION.connect(
+            capability_id,
+            app_package=app_package,
+            app_activity=app_activity,
+        )
+        tree = await MOBILE_SESSION.get_accessibility_tree()
+        screenshot = await MOBILE_SESSION.take_screenshot()
+        metadata = await MOBILE_SESSION.get_device_metadata()
+        return mcp_types.CallToolResult(
+            content=[_text_content_mcp(f"Mobile connection test completed for {capability_id}.")],
+            structuredContent={
+                "status": "ok",
+                "capability_id": capability_id,
+                "metadata": metadata,
+                "accessibility_tree": tree,
+                "screenshot_base64": screenshot,
+            },
+        )
+    except Exception as exc:
+        return _error_result(str(exc), {"capability_id": capability_id})
+    finally:
+        await MOBILE_SESSION.disconnect()
 
 
 @mcp.tool(structured_output=False)

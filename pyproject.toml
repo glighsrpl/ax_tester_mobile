@@ -16,7 +16,8 @@ dependencies = [
   "openpyxl==3.1.5",
   "python-pptx==1.0.2",
   "PyMuPDF==1.26.5",
-  "python-dotenv==1.2.1"
+  "python-dotenv==1.2.1",
+  "Appium-Python-Client>=4.0.0"
 ]
 
 [build-system]
@@ -29,7 +30,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["agents*", "common*", "tools*", "utils*", "schemas*", "assets*"]
+include = ["agents*", "mobile_agents*", "common*", "tools*", "utils*", "schemas*", "assets*"]
 
 [tool.setuptools.package-data]
 assets = ["templates/*"]

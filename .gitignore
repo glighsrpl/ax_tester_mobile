@@ -32,5 +32,12 @@ report_whl.py
 .claude
 .agents
 
+# Local SDKs
+android-sdk
+bin
+logs
+
 # Local notes
 agents.md
+TODO.md
+roadmap.md

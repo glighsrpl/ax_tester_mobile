@@ -1,4 +1,4 @@
-# ax_tester_mobile# Accessibility Tester
+# Accessibility Tester
 AI agent capable of testing the accessibility (also referred to as a11y or ax) of web pages.
 
 ## Browser Session (`BROWSER_SESSION`)
