@@ -20,7 +20,7 @@ from mobile_tools.utils.report_utils import (
     save_source_reports,
 )
 from mobile_tools.utils.session import MOBILE_SESSION
-from tools.saver_tool import generate_run_timestamp
+from mobile_tools.saver_tool import generate_run_timestamp
 from utils.report_store import REPORTS_ROOT
 
 MAX_CONCURRENT_STATIC_ANALYSES = 4

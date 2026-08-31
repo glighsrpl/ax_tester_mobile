@@ -8,7 +8,53 @@ from typing import Any
 
 from common import MobileContextKey
 from schemas import ScoreInfo
-from tools.saver_tool import _get_run_dir, _merge_score, _safe_int, _write_run_artifacts, generate_run_timestamp
+from utils.report_excel import build_excel_report
+from utils.report_pptx import build_pptx_report
+from utils.report_store import build_report_manifest, create_report_directory
+
+
+def generate_run_timestamp() -> str:
+    """Generate a timestamp suitable for report directories."""
+    return datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+
+def _get_run_dir(report_id: str) -> Path:
+    _, report_dir = create_report_directory(report_id)
+    return report_dir
+
+
+def _safe_int(value: object) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _score_info(value: object) -> ScoreInfo:
+    if not isinstance(value, Mapping):
+        return ScoreInfo()
+    return ScoreInfo(
+        level_A=_safe_int(value.get("level_A")),
+        level_AA=_safe_int(value.get("level_AA")),
+        level_AAA=_safe_int(value.get("level_AAA")),
+    )
+
+
+def _merge_score(target: ScoreInfo, value: object) -> None:
+    score = _score_info(value)
+    target.level_A += score.level_A
+    target.level_AA += score.level_AA
+    target.level_AAA += score.level_AAA
+
+
+def _write_run_artifacts(
+    report_id: str, report_dir: Path, reports: list[dict[str, Any]]
+) -> dict[str, object]:
+    with open(report_dir / "ax_report.json", "w", encoding="utf-8") as file:
+        json.dump(reports, file, indent=2, ensure_ascii=False)
+    build_excel_report(str(report_dir))
+    build_pptx_report(str(report_dir))
+    return build_report_manifest(report_id, report_dir)
 
 
 def save_mobile_report(

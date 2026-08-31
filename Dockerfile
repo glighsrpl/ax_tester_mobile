@@ -13,8 +13,6 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | b
  && node -v && npm -v \
  && npm i
 RUN python -m pip install -e . && rm -rf src/ax_tester.egg-info/
-RUN playwright install --with-deps chrome
-
 ENV GOOGLE_GENAI_USE_VERTEXAI="True"
 ENV GOOGLE_CLOUD_PROJECT="concept-quality-it-1"
 ENV GOOGLE_CLOUD_LOCATION="global"

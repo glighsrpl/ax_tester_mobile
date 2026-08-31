@@ -18,6 +18,3 @@ MODEL = LiteLlm(
     temperature=0.7,
     reasoning_effort="medium",
 )
-
-DUMMY_MODEL_NAME = "openai/gpt-4o"
-DUMMY_MODEL = LiteLlm(model=DUMMY_MODEL_NAME, temperature=0.7)

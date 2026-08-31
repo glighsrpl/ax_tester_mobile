@@ -4,16 +4,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SeverityKey = Literal["critical", "serious", "moderate", "minor"]
 SourceType = Literal[
-    "axe-core",
     "llm",
     "both",
-    # web sources
-    "llm/image-analyzer",
-    "llm/focus_visible_analyzer",
-    "llm/link_purpose_analyzer",
-    "llm/on_focus_analyzer",
-    "llm/no_keyboard_trap",
-    # mobile sources
     "deterministic_analyzer",
     "llm/contrast_agent",
 ]
