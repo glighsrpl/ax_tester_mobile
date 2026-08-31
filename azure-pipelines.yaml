@@ -1,0 +1,91 @@
+trigger:
+- main
+- dev
+
+resources:
+  repositories:
+  - repository: self
+  - repository: devops
+    type: git
+    name: devops
+
+variables:
+  dockerRegistryServiceConnection: 'cncqit-july2024'
+  imageRepository: accessibility
+  tag: $[iif(eq(variables['Build.SourceBranchName'], 'main'), 'main', iif(eq(variables['Build.SourceBranchName'], 'dev'), 'test', 'dev'))]
+  image: $[format('{0}:{1}', variables['imageRepository'], variables['tag'])]
+
+stages:
+- stage: CodeQuality
+  displayName: Code Quality Check
+  jobs:
+  - job: ruff
+    displayName: "Python formatting"
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - checkout: self
+      displayName: "Checkout"
+    - task: UsePythonVersion@0
+      displayName: "Set up Python"
+      inputs:
+        versionSpec: "3.12"
+    - script: |
+        python -m pip install --upgrade pip
+        pip install ruff
+      displayName: "Install ruff"
+    - script: ruff format --check src agent.py
+      displayName: "Check formatting"
+    - script: ruff check src agent.py
+      displayName: "Check lint"
+  
+- stage: Build
+  displayName: Build and push stage
+  jobs:
+  - job: Build
+    displayName: Build
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: replacetokens@6
+      inputs:
+        root: '$(System.DefaultWorkingDirectory)'
+        sources: 'Dockerfile'
+        tokenPattern: 'doubleunderscores'
+        addBOM: true
+    - task: Docker@2
+      displayName: Build image
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: Dockerfile
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          latest
+          $(tag)
+
+- stage: Deploy
+  condition: and(succeeded(), ne(variables['Build.SourceBranch'], 'refs/heads/main'))
+  displayName: Deploy on AKS
+  jobs:
+  - job: Deploy
+    displayName: Deploy
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - checkout: devops
+    - task: qetza.replacetokens.replacetokens-task.replacetokens@5
+      displayName: 'Replace tokens in **/*.yaml and **/*.yml '
+      inputs:
+        rootDirectory: '$(System.DefaultWorkingDirectory)'
+        targetFiles: |
+         **/*.yaml
+         **/*.yml
+        tokenPattern: rm
+    - task: Kubernetes@0
+      displayName: 'kubectl apply'
+      inputs:
+        kubernetesServiceConnection: 'aks-conn-dev-calico'
+        command: apply
+        useConfigurationFile: true
+        configuration: '$(System.DefaultWorkingDirectory)/aks-deploy-service.yaml'

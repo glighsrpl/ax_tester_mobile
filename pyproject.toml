@@ -1,0 +1,61 @@
+[project]
+name = "ax-tester"
+version = "0.1.0"
+description = "Accessibility Tester"
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+  "mcp==1.26.0",
+  "google-adk==1.24.1",
+  "litellm==1.81.10",
+  "playwright==1.58.0",
+  "beautifulsoup4==4.14.3",
+  "cairosvg==2.8.2",
+  "ruff==0.15.1",
+  "pandas==3.0.1",
+  "openpyxl==3.1.5",
+  "python-pptx==1.0.2",
+  "PyMuPDF==1.26.5",
+  "python-dotenv==1.2.1"
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["agents*", "common*", "tools*", "utils*", "schemas*", "assets*"]
+
+[tool.setuptools.package-data]
+assets = ["templates/*"]
+
+[tool.ax_tester]
+assets_dir = "src/assets"
+templates_dir = "src/assets/templates"
+
+[tool.ruff]
+line-length = 113
+indent-width = 4
+target-version = "py312"
+exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "W", "UP", "C4", "A"]  # E/F = pycodestyle+pyflakes, I = import sorting (isort)
+
+ignore = [
+  "E203", # whitespace before ':' (conflicts with some formatters; safe to ignore)
+  "E501", # line length handled by ruff format
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+skip-magic-trailing-comma = false
+docstring-code-format = true
+docstring-code-line-length = 113
