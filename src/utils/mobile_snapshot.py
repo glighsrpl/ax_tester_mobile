@@ -1,5 +1,5 @@
 from mobile_agents.utils.tree_sanitizer import detect_framework, sanitize_tree, xml_tree_to_dict
-from tools.mobile_base import MobileElementInfo
+from tools.base import MobileElementInfo
 from tools.mobile_screen_scanner import MobileScanSnapshot
 
 MAX_STATIC_ELEMENTS = 120

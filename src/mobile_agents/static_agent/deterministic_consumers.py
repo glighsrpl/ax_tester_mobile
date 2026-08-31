@@ -8,7 +8,7 @@ from google.adk.agents.callback_context import CallbackContext
 from common import MobileContextKey
 from mobile_agents.static_agent.consumers.deterministic.runner import DeterministicRunner
 from schemas import Issue
-from tools.mobile_base import MobileElementInfo
+from tools.base import MobileElementInfo
 from tools.mobile_screen_scanner import MobileScanSnapshot
 
 

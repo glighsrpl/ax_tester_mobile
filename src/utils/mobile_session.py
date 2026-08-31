@@ -74,7 +74,6 @@ def _appium_env() -> dict[str, str]:
     env = os.environ.copy()
     env[ANDROID_SDK_ROOT_ENV] = sdk_root
     env[APPIUM_HOME_ENV] = str(_project_root())
-    env["PATH"] = os.pathsep.join([str(Path(sdk_root) / "platform-tools"), env.get("PATH", "")])
     return env
 
 

@@ -6,7 +6,7 @@ import pkgutil
 
 from mobile_agents.static_agent.consumers.base import BaseConsumer, BaseSnapshotConsumer
 from schemas import Issue
-from tools.mobile_base import MobileElementInfo
+from tools.base import MobileElementInfo
 from tools.mobile_screen_scanner import MobileScanSnapshot
 
 

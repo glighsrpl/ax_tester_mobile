@@ -6,7 +6,7 @@ It includes utilities for extracting information about mobile elements, filterin
 import re
 from xml.etree import ElementTree
 
-from tools.mobile_base import MobileElementInfo
+from tools.base import MobileElementInfo
 
 BOUNDS_RE = re.compile(r"\[(\d+),(\d+)]\[(\d+),(\d+)]")
 TRUE_VALUES = {"true", "1"}

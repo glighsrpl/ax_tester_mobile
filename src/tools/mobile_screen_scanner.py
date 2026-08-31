@@ -12,7 +12,7 @@ from typing import Any
 from uuid import uuid4
 from xml.etree import ElementTree
 
-from tools.mobile_base import MobileElementInfo, is_in_place_control
+from tools.base import MobileElementInfo, is_in_place_control
 from tools.mobile_tree import bounds_center, bounds_size, get_interactive_elements, parse_mobile_tree
 from utils.mobile_session import MOBILE_SESSION, get_mobile_run_logs_dir
 
