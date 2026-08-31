@@ -128,12 +128,15 @@ def _build_overview_multi(
 
     pages_tested = [str(r.get("page", "")).strip() for r in page_reports if str(r.get("page", "")).strip()]
 
-    if len(pages_tested) == 1:
-        url_display = pages_tested[0]
-    elif len(pages_tested) > 1:
-        url_display = f"{pages_tested[0]} (+{len(pages_tested) - 1} other pages)"
+    if pages_tested[0].startswith("mobile"):
+        url_display = pages_tested[0].removeprefix("mobile://").split("#", 1)[0]
     else:
-        url_display = "N/A"
+        if len(pages_tested) == 1:
+            url_display = pages_tested[0]
+        elif len(pages_tested) > 1:
+            url_display = f"{pages_tested[0]} (+{len(pages_tested) - 1} other pages)"
+        else:
+            url_display = "N/A"
 
     final_outcome, final_outcome_color = _get_final_outcome(len(all_issues))
 
@@ -984,5 +987,5 @@ def _add_template_fallback_text(slide: Any, title_text: str, rgb_color: Any, inc
 
 
 if __name__ == "__main__":
-    results_dir = "results/2026-06-17_17-34-34_shop.reply.com"
+    results_dir = "results/shop.reply.com_v3"
     build_pptx_report(results_dir)

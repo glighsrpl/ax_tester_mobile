@@ -6,7 +6,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 AXTESTER_EXECUTOR_ENV = "AXTESTER_EXECUTOR"
-DEFAULT_AXTESTER_EXECUTOR = "mcp"
+DEFAULT_AXTESTER_EXECUTOR = "local"
 SUPPORTED_BROWSER_BACKENDS = {"local", "mcp"}
 
 

@@ -341,5 +341,5 @@ def _extract_issue_list(report: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 if __name__ == "__main__":
-    results_dir = "/home/pbianco/ax_tester/results/2026-05-18_15-54-29_shop.reply.com/2026-05-18_15-58-56"
+    results_dir = "results/shop.reply.com_v3"
     build_excel_report(results_dir)

@@ -29,11 +29,11 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from agent import root_agent
 from common import ContextKey
-from tools import MobileRuntimeNavigatorTool
-from tools.mobile_saver_tool import save_mobile_report
+from mobile_agent import mobile_root_agent
+from mobile_tools.saver_tool import run_save_mobile
+from mobile_tools.utils.capabilities import discover_mobile_capabilities
+from mobile_tools.utils.session import MOBILE_SESSION
 from utils.browser_session import BROWSER_SESSION
-from utils.mobile_capabilities import discover_mobile_capabilities
-from utils.mobile_session import MOBILE_SESSION
 from utils.report_store import (
     REPORT_FILE_SPECS,
     build_report_manifest,
@@ -182,6 +182,103 @@ class RootAgentBridge:
 
 
 bridge = RootAgentBridge()
+
+
+@dataclass
+class MobileAgentBridge:
+    session_service: InMemorySessionService = field(default_factory=InMemorySessionService)
+    runner: Runner | None = None
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    async def run_turn(self, state: dict[str, Any]) -> dict[str, Any]:
+        async with self.lock:
+            self._ensure_runner()
+            session_id = str(uuid.uuid4())
+            await self.session_service.create_session(
+                app_name="mobile_ax_tester_mcp",
+                user_id=USER_ID,
+                session_id=session_id,
+                state=state,
+            )
+
+            max_steps = state.get(str(ContextKey.MOBILE_MAX_STEPS), 50)
+            max_activities = state.get(str(ContextKey.MOBILE_MAX_ACTIVITIES), 3)
+            max_depth = state.get(str(ContextKey.MOBILE_MAX_DEPTH), 5)
+            instructions = str(state.get(str(ContextKey.MOBILE_INSTRUCTIONS)) or "")
+            instruction_arg = repr(instructions)
+            content = genai_types.Content(
+                role="user",
+                parts=[
+                    genai_types.Part(
+                        text=(
+                            "Run the mobile accessibility test now. "
+                            f"Call run_mobile_test with max_steps={max_steps}, instructions={instruction_arg}, "
+                            f"max_activities={max_activities}, max_depth={max_depth}."
+                        )
+                    )
+                ],
+            )
+            events: list[Any] = []
+            assert self.runner is not None
+            async with Aclosing(
+                self.runner.run_async(user_id=USER_ID, session_id=session_id, new_message=content)
+            ) as event_stream:
+                async for event in event_stream:
+                    events.append(event)
+
+            state = await self._load_state(session_id)
+            return self._build_result(session_id, events, state)
+
+    def _ensure_runner(self) -> None:
+        if self.runner is None:
+            self.runner = Runner(
+                app_name="mobile_ax_tester_mcp",
+                agent=mobile_root_agent,
+                session_service=self.session_service,
+            )
+
+    def _build_result(
+        self,
+        session_id: str,
+        events: list[Any],
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
+        messages: list[dict[str, str]] = []
+        function_calls: list[dict[str, Any]] = []
+        final_response = ""
+
+        for event in events:
+            if event.content and event.content.parts:
+                text = "".join(part.text or "" for part in event.content.parts)
+                if text.strip():
+                    messages.append({"author": event.author or "unknown", "text": text})
+                    if (event.author or "").lower() != "user":
+                        final_response = text
+
+            for fc in event.get_function_calls() or []:
+                function_calls.append({"name": fc.name, "args": fc.args})
+
+        return {
+            "status": "ok",
+            "session_id": session_id,
+            "final_response": final_response,
+            "messages": messages,
+            "function_calls": function_calls,
+            "state": state,
+        }
+
+    async def _load_state(self, session_id: str) -> dict[str, Any]:
+        session = await self.session_service.get_session(
+            app_name="mobile_ax_tester_mcp",
+            user_id=USER_ID,
+            session_id=session_id,
+        )
+        if not session:
+            return {}
+        return dict(session.state)
+
+
+mobile_bridge = MobileAgentBridge()
 
 
 def _extract_report_artifact(response: dict[str, Any]) -> dict[str, Any] | None:
@@ -370,13 +467,32 @@ async def get_test_capabilities() -> dict[str, Any]:
 
 
 @mcp.tool(structured_output=False)
-async def run_full_mobile_test(  # FIXME
+async def run_full_mobile_test(
     app_package: str,
     app_activity: str,
     capability_id: str | None = None,
-    max_steps: int = 20,
+    max_steps: int = 50,
+    max_activities: int = 3,
+    max_depth: int = 5,
+    instructions: str | None = None,
 ) -> mcp_types.CallToolResult:
-    """Run the mobile accessibility flow using explicit app package/activity arguments."""
+    """Run the mobile accessibility flow using explicit app package/activity arguments.
+
+    Parameters:
+        app_package: Required. The package name of the target mobile application to test.
+        app_activity: Required. The main activity of the target mobile application to test.
+        capability_id: Optional. The ID of the mobile device capability to use for testing.
+            If not provided, the tool will attempt to discover a single available capability.
+        max_steps: Optional. The maximum number of steps to perform during the test.
+        max_activities: Optional. The maximum number of unique activities to visit during the test.
+        max_depth: Optional. The maximum navigation depth from the initial mobile screen.
+        instructions: Optional. Instructions for guiding the mobile test.
+            If not provided, the tool will perform a plain accessibility scan.
+
+    Only `app_package` and `app_activity` are required.
+    Optional arguments should be supplied only when the caller wants to override the documented defaults,
+    although MCP clients may still include default-valued arguments in the tool call.
+    """
     app_package = app_package.strip()
     app_activity = app_activity.strip().lstrip("/")
     capability_id = capability_id.strip() if capability_id else None
@@ -393,33 +509,20 @@ async def run_full_mobile_test(  # FIXME
         capability_id = str(capabilities[0]["id"])
 
     try:
-        await MOBILE_SESSION.connect(
-            capability_id,
-            app_package=app_package,
-            app_activity=app_activity,
-        )
-
-        result = await MobileRuntimeNavigatorTool({"max_steps": max_steps}).execute()
-        if not result.is_success():
-            return _error_result(
-                result.error or "Mobile accessibility test failed.", {"capability_id": capability_id}
-            )
-
-        report_artifact = save_mobile_report(
-            app_package=app_package,
-            app_activity=app_activity,
-            capability_id=capability_id,
-            navigator_data=result.data,
-        )
-        return _build_run_full_test_result(
+        bridge_result = await mobile_bridge.run_turn(
             {
-                "status": "ok",
-                "session_id": None,
-                "current_url": f"mobile://{app_package}/{app_activity}",
-                "final_response": "Mobile accessibility test completed.",
-                "report_artifact": report_artifact,
+                str(ContextKey.MOBILE_APP_PACKAGE): app_package,
+                str(ContextKey.MOBILE_APP_ACTIVITY): app_activity,
+                str(ContextKey.MOBILE_CAPABILITY_ID): capability_id,
+                str(ContextKey.MOBILE_MAX_STEPS): max_steps,
+                str(ContextKey.MOBILE_MAX_ACTIVITIES): max_activities,
+                str(ContextKey.MOBILE_MAX_DEPTH): max_depth,
+                str(ContextKey.MOBILE_INSTRUCTIONS): (instructions or "").strip(),
             }
         )
+        bridge_result["report_artifact"] = run_save_mobile(bridge_result.get("state", {}))
+        bridge_result["current_url"] = f"mobile://{app_package}/{app_activity}"
+        return _build_run_full_test_result(bridge_result)
     except Exception as exc:
         return _error_result(str(exc), {"capability_id": capability_id})
     finally:
@@ -478,4 +581,4 @@ if __name__ == "__main__":
     mcp.settings.host = args.host
     mcp.settings.port = args.port
 
-    mcp.run(transport="streamable-http")
+    mcp.run() #(transport="streamable-http")
