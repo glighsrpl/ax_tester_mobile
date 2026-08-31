@@ -10,6 +10,7 @@ from google.genai import types
 
 from common import MobileContextKey
 from mobile_agents.static_agent import mobile_merge_agent, mobile_static_analysis_agent
+from mobile_tools.utils.contrast_calculator import calculate_contrast_measurements
 from schemas import Report
 
 
@@ -23,12 +24,17 @@ class StaticSnapshotReports:
 
 async def run_static_snapshot(snapshot_payload: dict[str, object]) -> StaticSnapshotReports:
     serialized_snapshot = serialize_snapshot(snapshot_payload)
+    screenshot_bytes, mime_type = _screenshot_bytes(str(snapshot_payload["screenshot"]))
+    serialized_snapshot["contrast_measurements"] = calculate_contrast_measurements(
+        screenshot_bytes,
+        serialized_snapshot["elements"],
+    )
     runner = InMemoryRunner(agent=mobile_static_analysis_agent, app_name="mobile_static_analysis")
     session_id = await _run_agent(
         runner,
         # Keep large binary screenshot data out of the text prompt state.
         {str(MobileContextKey.NAVIGATOR_DATA): serialized_snapshot},
-        _snapshot_content(snapshot_payload),
+        _snapshot_content(screenshot_bytes, mime_type),
     )
     return await _snapshot_reports(runner, session_id)
 
@@ -73,20 +79,12 @@ async def _run_agent(runner: InMemoryRunner, state: dict[str, object], content: 
     return session_id
 
 
-def _snapshot_content(snapshot_payload: dict[str, object]) -> types.Content:
-    screenshot_path = snapshot_payload.get("screenshot")
-    if not isinstance(screenshot_path, str) or not screenshot_path:
-        raise ValueError("Mobile static analysis requires a screenshot.")
+def _snapshot_content(screenshot_bytes: bytes, mime_type: str) -> types.Content:
     parts = [
         types.Part(text="Run mobile static analysis for the attached screenshot now."),
-        _screenshot_part(screenshot_path),
+        types.Part.from_bytes(data=screenshot_bytes, mime_type=mime_type),
     ]
     return types.Content(role="user", parts=parts)
-
-
-def _screenshot_part(screenshot_path: str) -> types.Part:
-    screenshot_bytes, mime_type = _screenshot_bytes(screenshot_path)
-    return types.Part.from_bytes(data=screenshot_bytes, mime_type=mime_type)
 
 
 def _screenshot_bytes(screenshot: str) -> tuple[bytes, str]:
