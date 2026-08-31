@@ -7,6 +7,7 @@ from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import MODEL, MobileContextKey
+from mobile_agents.static_agent.contrast_agent import contrast_agent
 from mobile_agents.static_agent.init_agent import init_agent
 from schemas import Report
 
@@ -14,16 +15,21 @@ from schemas import Report
 def get_mobile_merge_instruction(tool_context: ToolContext) -> str:
     """Build the merge prompt from the separate deterministic and LLM reports."""
     deterministic_report = _state_report(tool_context, MobileContextKey.DETERMINISTIC_REPORT)
+    contrast_report = _state_report(tool_context, MobileContextKey.CONTRAST_REPORT)
     llm_report = _state_report(tool_context, MobileContextKey.LLM_REPORT)
     return f"""
         Merge the following mobile accessibility reports into one Report schema.
 
         Preserve every supported issue. De-duplicate only issues that have the same
         WCAG rule, element evidence, and description. Preserve each issue's source:
-        "deterministic" for rules-based findings and "llm" for LLM findings.
+        "deterministic" for rules-based findings, "contrast_agent" for visual findings,
+        and "llm" for LLM findings.
 
         Deterministic report:
         {json.dumps(deterministic_report, ensure_ascii=False)}
+
+        Contrast report:
+        {json.dumps(contrast_report, ensure_ascii=False)}
 
         LLM report:
         {json.dumps(llm_report, ensure_ascii=False)}
@@ -45,7 +51,7 @@ def _state_report(tool_context: ToolContext, key: MobileContextKey) -> dict[str,
 mobile_static_analysis_agent = SequentialAgent(
     name="MobileStaticAnalysisAgent",
     description="Run WCAG static analysis on mobile snapshots.",
-    sub_agents=[init_agent],
+    sub_agents=[contrast_agent, init_agent],
 )
 
 mobile_merge_agent = LlmAgent(

@@ -15,6 +15,7 @@ def build_static_snapshot_payload(
         "snapshot_id": snapshot.snapshot_id,
         "snapshot_index": snapshot_index,
         "activity": snapshot.activity,
+        "screenshot": snapshot.screenshot,
         "tree_summary": _limited_tree_summary(elements),
         "elements": [_element_payload(element) for element in elements],
     }
@@ -105,6 +106,8 @@ def _element_payload(element: MobileElementInfo) -> dict[str, object]:
         "input_type": _trim_text(element.input_type),
         "parent_index": element.parent_index,
         "important_for_accessibility": _trim_text(element.important_for_accessibility),
+        "font_size": element.font_size,
+        "font_style": _trim_text(element.font_style),
     }
 
 

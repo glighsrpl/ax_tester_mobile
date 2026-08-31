@@ -13,6 +13,7 @@ SourceType = Literal[
     "llm/on_focus_analyzer",
     "llm/no_keyboard_trap",
     "deterministic",
+    "contrast_agent",
 ]
 ConfidenceLevel = Literal["high", "medium", "low"]
 WcagRule = Literal[

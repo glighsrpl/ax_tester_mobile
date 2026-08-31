@@ -15,6 +15,7 @@ class SnapshotAnalysis:
     activity: str
     snapshot_id: str
     deterministic_report: Report
+    contrast_report: Report
     llm_report: Report
     debug_data: dict[str, object]
 
@@ -33,10 +34,12 @@ async def consume_static_snapshots(
         try:
             result = await static_analyzer.analyze(snapshot, snapshot_index)
             deterministic = result.get("deterministic_report")
+            contrast = result.get("contrast_report")
             llm = result.get("llm_report")
             debug_data = result.get("debug_data")
             if (
                 not isinstance(deterministic, Report)
+                or not isinstance(contrast, Report)
                 or not isinstance(llm, Report)
                 or not isinstance(debug_data, dict)
             ):
@@ -47,6 +50,7 @@ async def consume_static_snapshots(
                     activity=snapshot.activity,
                     snapshot_id=snapshot.snapshot_id,
                     deterministic_report=deterministic,
+                    contrast_report=contrast,
                     llm_report=llm,
                     debug_data=debug_data,
                 )

@@ -46,6 +46,8 @@ def parse_mobile_tree(
             important_for_accessibility=_raw_attr(
                 node, "importantForAccessibility", "important-for-accessibility"
             ),
+            font_size=_float_attr(node, "textSize", "text-size", "font-size", "fontSize"),
+            font_style=_raw_attr(node, "textStyle", "text-style", "font-style", "fontStyle"),
         )
         for index, node in enumerate(nodes)
         if node is not root
@@ -103,6 +105,16 @@ def _attr(node: ElementTree.Element, *names: str) -> str | None:
 
 def _raw_attr(node: ElementTree.Element, *names: str) -> str | None:
     return next((node.attrib[name] for name in names if name in node.attrib), None)
+
+
+def _float_attr(node: ElementTree.Element, *names: str) -> float | None:
+    value = _raw_attr(node, *names)
+    if value is None:
+        return None
+    try:
+        return float(value.removesuffix("sp").removesuffix("px").strip())
+    except ValueError:
+        return None
 
 
 def _bool(node: ElementTree.Element, name: str, *, default: bool = False) -> bool:

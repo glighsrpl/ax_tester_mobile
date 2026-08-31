@@ -22,7 +22,7 @@ from mobile_tools.utils.report_utils import (
 )
 from mobile_tools.utils.session import MOBILE_SESSION
 from mobile_tools.utils.snapshot_utils import build_static_debug_payload, build_static_snapshot_payload
-from mobile_tools.utils.static_analysis_utils import run_mobile_merge, run_static_snapshot
+from mobile_tools.utils.static_analysis_utils import StaticSnapshotReports, run_mobile_merge, run_static_snapshot
 from schemas import Issue, Report
 from tools.saver_tool import generate_run_timestamp
 from utils.report_store import REPORTS_ROOT
@@ -38,6 +38,7 @@ __all__ = ["flatten_issues_by_activity", "mobile_root_agent", "run_mobile_test"]
 class _StaticAnalysisResult:
     report: Report
     deterministic_report: Report
+    contrast_report: Report
     llm_report: Report
     issues_by_activity: dict[str, list[Issue]]
     debug_data: list[dict[str, object]]
@@ -52,11 +53,39 @@ class _SnapshotNavigator(Protocol):
 class _MobileStaticAnalyzer:
     async def analyze(self, snapshot: MobileScanSnapshot, snapshot_index: int) -> dict[str, object]:
         snapshot_payload = build_static_snapshot_payload(snapshot, snapshot_index)
+        debug_data = build_static_debug_payload(snapshot_payload)
+        try:
+            llm_reports = await run_static_snapshot(snapshot_payload)
+        except Exception:
+            logger.exception("LLM static analysis failed for snapshot %s", snapshot.snapshot_id)
+            llm_reports = _empty_llm_reports(snapshot)
         return {
             "deterministic_report": deterministic_report(snapshot),
-            "llm_report": await run_static_snapshot(snapshot_payload),
-            "debug_data": build_static_debug_payload(snapshot_payload),
+            "contrast_report": llm_reports.contrast_report,
+            "llm_report": llm_reports.llm_report,
+            "debug_data": debug_data,
         }
+
+
+def _empty_llm_reports(snapshot: MobileScanSnapshot) -> StaticSnapshotReports:
+    page = f"mobile://{snapshot.activity}"
+    metadata = [{"key": "snapshot_id", "value": snapshot.snapshot_id}]
+    return StaticSnapshotReports(
+        contrast_report=Report(
+            tool_name="contrast_agent",
+            total_issues=0,
+            page=page,
+            issue_list=[],
+            metadata=metadata,
+        ),
+        llm_report=Report(
+            tool_name="llm",
+            total_issues=0,
+            page=page,
+            issue_list=[],
+            metadata=metadata,
+        ),
+    )
 
 
 MOBILE_ROOT_AGENT_INSTRUCTION = """
@@ -122,6 +151,7 @@ async def run_mobile_test(
         save_source_reports(
             REPORTS_ROOT / report_id / "static_reports",
             static_analysis.deterministic_report,
+            static_analysis.contrast_report,
             static_analysis.llm_report,
         )
     finally:
@@ -204,11 +234,15 @@ async def _run_mobile_pipeline(
     deterministic = merge_static_reports(
         [analysis.deterministic_report for analysis in analyses], len(analyses), tool_name="deterministic"
     )
+    contrast = merge_static_reports(
+        [analysis.contrast_report for analysis in analyses], len(analyses), tool_name="contrast_agent"
+    )
     llm = merge_static_reports([analysis.llm_report for analysis in analyses], len(analyses), tool_name="llm")
     activity_issues = issues_by_activity(analyses, navigator_data)
     return navigator_data, _StaticAnalysisResult(
-        report=await _merge_reports(deterministic, llm, activity_issues),
+        report=await _merge_reports(deterministic, contrast, llm, activity_issues),
         deterministic_report=deterministic,
+        contrast_report=contrast,
         llm_report=llm,
         issues_by_activity=activity_issues,
         debug_data=[analysis.debug_data for analysis in analyses],
@@ -226,9 +260,10 @@ async def _indexed_snapshots(
 
 async def _merge_reports(
     deterministic: Report,
+    contrast: Report,
     llm: Report,
     activity_issues: dict[str, list[Issue]],
 ) -> Report:
-    if not deterministic.issue_list and not llm.issue_list:
+    if not deterministic.issue_list and not contrast.issue_list and not llm.issue_list:
         return merge_static_reports([], 0, activity_issues, tool_name="mobile")
-    return await run_mobile_merge(deterministic, llm)
+    return await run_mobile_merge(deterministic, contrast, llm)

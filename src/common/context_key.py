@@ -42,6 +42,7 @@ class MobileContextKey(StrEnum):
     STATIC_RESULTS = "mobile_static_results"
     STATIC_DEBUG_DATA = "mobile_static_debug_data"
     DETERMINISTIC_REPORT = "mobile_deterministic_report"
+    CONTRAST_REPORT = "mobile_contrast_report"
     LLM_REPORT = "mobile_llm_report"
 
     # saved artifacts

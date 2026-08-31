@@ -12,6 +12,7 @@ class SnapshotReportAnalysis(Protocol):
     activity: str
     snapshot_id: str
     deterministic_report: Report
+    contrast_report: Report
     llm_report: Report
 
 
@@ -26,9 +27,10 @@ def deterministic_report(snapshot: MobileScanSnapshot) -> Report:
     )
 
 
-def save_source_reports(report_dir: Path, deterministic: Report, llm: Report) -> None:
+def save_source_reports(report_dir: Path, deterministic: Report, contrast: Report, llm: Report) -> None:
     report_dir.mkdir(parents=True, exist_ok=True)
     _write_report(report_dir / "deterministic.json", deterministic)
+    _write_report(report_dir / "contrast_agent.json", contrast)
     _write_report(report_dir / "llm.json", llm)
 
 
@@ -71,7 +73,7 @@ def issues_by_activity(
         image_path = screenshot_path if isinstance(screenshot_path, str) and screenshot_path else None
         activity_issues.setdefault(activity, []).extend(
             issue.model_copy(update={"image_url_or_path": image_path})
-            for report in (analysis.deterministic_report, analysis.llm_report)
+            for report in (analysis.deterministic_report, analysis.contrast_report, analysis.llm_report)
             for issue in report.issue_list
         )
     return {activity: dedupe_issues(issues) for activity, issues in activity_issues.items()}
