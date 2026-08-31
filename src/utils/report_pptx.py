@@ -22,6 +22,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
+from mobile_tools.utils.screenshot_annotations import annotate_screenshot, parse_bounds
 from utils.wcag_helper import WCAG_RULE_MAPPER, get_wcag_level
 
 logger = logging.getLogger(__name__)
@@ -184,16 +185,21 @@ def build_pptx_report(results_dir: str) -> str:
         page_url = str(page_report.get("page", "")).strip()
         page_issues = _sort_issues(_load_all_issues(page_report))
 
-        # if len(page_reports) > 1:
-        page_screenshot_bytes = _get_page_screenshot_bytes(page_report)
-        _add_page_separator_slide(
-            prs,
-            page_url,
-            page_index,
-            len(page_reports),
-            len(page_issues),
-            page_screenshot_bytes,
-        )
+        if len(page_reports) > 1:
+            page_screenshot_bytes = _get_page_screenshot_bytes(page_report)
+            page_screenshot_bytes = _annotate_mobile_screenshot(
+                page_screenshot_bytes,
+                page_issues,
+                page_report.get("tool_name"),
+            )
+            _add_page_separator_slide(
+                prs,
+                page_url,
+                page_index,
+                len(page_reports),
+                len(page_issues),
+                page_screenshot_bytes,
+            )
 
         for issue in page_issues:
             global_issue_index += 1
@@ -208,6 +214,7 @@ def build_pptx_report(results_dir: str) -> str:
                 Inches,
                 Pt,
                 issue_image_cache,
+                page_report.get("tool_name"),
             )
 
     _add_thankyou_template_slide(prs, RGBColor, Inches, Pt)
@@ -513,6 +520,7 @@ def _add_issue_slide(
     inches: Any,
     pt: Any,
     issue_image_cache: dict[str, bytes | None],
+    tool_name: object,
 ) -> None:
     slide = prs.slides.add_slide(prs.slide_layouts[6])
 
@@ -527,6 +535,7 @@ def _add_issue_slide(
     fix = _truncate(_normalize_text(issue.get("fix"), fallback="N/A"), FIX_MAX_CHARS)
     issue_image_source = _get_issue_image_source(issue)
     issue_image_bytes = _get_issue_image_bytes(issue_image_source, issue_image_cache)
+    issue_image_bytes = _annotate_mobile_screenshot(issue_image_bytes, [issue], tool_name)
     has_portrait_issue_image = _is_portrait_image(issue_image_bytes)
 
     content_width = inches(8.8) if has_portrait_issue_image else inches(9.2)
@@ -841,6 +850,18 @@ def _get_page_screenshot_bytes(page_report: dict[str, Any]) -> bytes | None:
     return None
 
 
+def _annotate_mobile_screenshot(
+    screenshot_bytes: bytes | None,
+    issues: list[dict[str, Any]],
+    tool_name: object,
+) -> bytes | None:
+    if screenshot_bytes is None or tool_name != "mobile_ax_tester":
+        return screenshot_bytes
+
+    bounds = [bounds for issue in issues for bounds in parse_bounds(issue.get("html_snippet"))]
+    return annotate_screenshot(screenshot_bytes, bounds)
+
+
 def _decode_base64_image(value: str) -> bytes | None:
     data = value.strip()
     if data.startswith("data:") and "," in data:
@@ -1014,5 +1035,5 @@ def _add_template_fallback_text(slide: Any, title_text: str, rgb_color: Any, inc
 
 
 if __name__ == "__main__":
-    results_dir = "results/shop.reply.com_v3"
+    results_dir = "results/2026-08-25_10-24-49_com.ingka.ikea.app"
     build_pptx_report(results_dir)
