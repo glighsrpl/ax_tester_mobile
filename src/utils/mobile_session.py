@@ -8,7 +8,6 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
@@ -43,7 +42,7 @@ MOBILE_SESSION_LOCK = asyncio.Lock()
 
 
 def _project_root() -> Path:
-    return Path(__file__).resolve().parents[3]
+    return Path(__file__).resolve().parents[2]
 
 
 def _create_mobile_run_logs_dir(app_package: str | None = None) -> Path:
@@ -73,7 +72,8 @@ def _appium_env() -> dict[str, str]:
     sdk_root = os.getenv(ANDROID_SDK_ROOT_ENV) or str(_project_root() / "android-sdk")
     env = os.environ.copy()
     env[ANDROID_SDK_ROOT_ENV] = sdk_root
-    env[APPIUM_HOME_ENV] = str(_project_root())
+    env[APPIUM_HOME_ENV] = os.getenv(APPIUM_HOME_ENV) or str(_project_root())
+    env["PATH"] = os.pathsep.join([str(Path(sdk_root) / "platform-tools"), env.get("PATH", "")])
     return env
 
 
@@ -92,12 +92,8 @@ class MobileSession:
     def __init__(self, server_url: str | None = None) -> None:
         self.server_url = server_url or os.getenv(APPIUM_SERVER_URL_ENV) or DEFAULT_APPIUM_SERVER_URL
         self.driver = None
-        self.server_process: subprocess.Popen | None = None
         self.app_package: str | None = None
         self.app_activity: str | None = None
-
-    def is_initialized(self) -> bool:
-        return self.driver is not None
 
     async def connect(
         self,
@@ -175,10 +171,6 @@ class MobileSession:
         left, top, right, bottom = map(int, re.findall(r"\d+", bounds)[:4])
         await self.tap((left + right) // 2, (top + bottom) // 2)
 
-    async def tap_center(self) -> None:
-        size = await self.get_window_size()
-        await self.tap(size["width"] // 2, size["height"] // 2)
-
     async def swipe(self, start_x: int, start_y: int, end_x: int, end_y: int, duration_ms: int = 500) -> None:
         await asyncio.to_thread(
             self._driver.swipe,
@@ -251,7 +243,7 @@ class MobileSession:
             return
         log_file = _log_path().open("a", encoding="utf-8")
         appium_bin = _project_root() / "node_modules" / ".bin" / "appium"
-        self.server_process = subprocess.Popen(
+        server_process = subprocess.Popen(
             [
                 str(appium_bin),
                 "--address",
@@ -269,7 +261,7 @@ class MobileSession:
         for _ in range(30):
             if self._server_ready():
                 return
-            if self.server_process.poll() is not None:
+            if server_process.poll() is not None:
                 raise RuntimeError(f"Appium server failed to start. Check {_log_path()}.")
             await asyncio.to_thread(time.sleep, 1)
 
@@ -288,9 +280,6 @@ class MobileSession:
 
     async def take_screenshot(self) -> str:
         return await asyncio.to_thread(self._driver.get_screenshot_as_base64)
-
-    async def get_device_metadata(self) -> dict[str, Any]:
-        return await asyncio.to_thread(lambda: dict(self._driver.capabilities))
 
     async def get_current_package(self) -> str:
         return await asyncio.to_thread(lambda: str(self._driver.current_package or ""))
