@@ -515,11 +515,13 @@ async def run_full_mobile_test(
         capability_id = str(capabilities[0]["id"])
 
     try:
+        platform = _detect_mobile_platform(capabilities, capability_id)
         bridge_result = await mobile_bridge.run_turn(
             {
                 str(MobileContextKey.APP_PACKAGE): app_package,
                 str(MobileContextKey.APP_ACTIVITY): app_activity,
                 str(MobileContextKey.CAPABILITY_ID): capability_id,
+                str(MobileContextKey.PLATFORM): platform,
                 str(MobileContextKey.MAX_STEPS): max_steps,
                 str(MobileContextKey.MAX_ACTIVITIES): max_activities,
                 str(MobileContextKey.MAX_DEPTH): max_depth,
@@ -531,6 +533,25 @@ async def run_full_mobile_test(
         return _build_run_full_test_result(bridge_result)
     except Exception as exc:
         return _error_result(str(exc), {"capability_id": capability_id})
+
+
+def _detect_mobile_platform(
+    capabilities: list[dict[str, object]], capability_id: str
+) -> Literal["Android", "iOS"]:
+    """Resolve the supported platform of the selected mobile capability."""
+    capability = next(
+        (candidate for candidate in capabilities if candidate.get("id") == capability_id),
+        None,
+    )
+    if not capability:
+        raise ValueError(f"Mobile capability {capability_id!r} is not available.")
+
+    platform = str(capability.get("platform") or "").casefold()
+    if platform == "android":
+        return "Android"
+    if platform == "ios":
+        return "iOS"
+    raise ValueError(f"Unsupported mobile platform {platform or 'unknown'} for capability {capability_id!r}.")
 
 
 @mcp.tool(structured_output=False)

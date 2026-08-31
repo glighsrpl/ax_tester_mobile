@@ -67,9 +67,7 @@ def get_mobile_run_logs_dir() -> Path:
 
 
 def _appium_env() -> dict[str, str]:
-    sdk_root = (
-        os.getenv(ANDROID_SDK_ROOT_ENV) or str(_project_root() / "android-sdk")
-    )
+    sdk_root = os.getenv(ANDROID_SDK_ROOT_ENV) or str(_project_root() / "android-sdk")
     env = os.environ.copy()
     env[ANDROID_SDK_ROOT_ENV] = sdk_root
     env[APPIUM_HOME_ENV] = str(_project_root())

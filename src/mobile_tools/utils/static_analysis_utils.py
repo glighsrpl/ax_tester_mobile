@@ -99,7 +99,7 @@ def group_merged_issues_by_activity(
     return issues_by_activity
 
 
-async def run_static_snapshot(snapshot_payload: dict[str, object]) -> StaticSnapshotReports:
+async def run_static_snapshot(snapshot_payload: dict[str, object], platform: str) -> StaticSnapshotReports:
     serialized_snapshot = serialize_snapshot(snapshot_payload)
     screenshot_bytes, mime_type = _screenshot_bytes(str(snapshot_payload["screenshot"]))
     serialized_snapshot["contrast_measurements"] = calculate_contrast_measurements(
@@ -110,7 +110,10 @@ async def run_static_snapshot(snapshot_payload: dict[str, object]) -> StaticSnap
     session_id = await _run_agent(
         runner,
         # Keep large binary screenshot data out of the text prompt state.
-        {str(MobileContextKey.NAVIGATOR_DATA): serialized_snapshot},
+        {
+            str(MobileContextKey.NAVIGATOR_DATA): serialized_snapshot,
+            str(MobileContextKey.PLATFORM): platform,
+        },
         _snapshot_content(screenshot_bytes, mime_type),
     )
     return await _snapshot_reports(runner, session_id)

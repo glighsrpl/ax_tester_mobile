@@ -32,12 +32,13 @@ class MobileContextKey(StrEnum):
     APP_PACKAGE = "mobile_app_package"
     APP_ACTIVITY = "mobile_app_activity"
     CAPABILITY_ID = "mobile_capability_id"
+    PLATFORM = "mobile_platform"
     MAX_STEPS = "mobile_max_steps"
     MAX_ACTIVITIES = "mobile_max_activities"
     MAX_DEPTH = "mobile_max_depth"
     INSTRUCTIONS = "mobile_instructions"
 
-    # outcomes
+    # final outcomes
     NAVIGATOR_DATA = "mobile_navigator_data"
     STATIC_RESULTS = "mobile_static_results"
     STATIC_DEBUG_DATA = "mobile_static_debug_data"

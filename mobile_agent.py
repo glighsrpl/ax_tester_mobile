@@ -55,8 +55,9 @@ async def run_mobile_test(
     app_package = state_string(tool_context.state, MobileContextKey.APP_PACKAGE)
     app_activity = state_string(tool_context.state, MobileContextKey.APP_ACTIVITY)
     capability_id = state_string(tool_context.state, MobileContextKey.CAPABILITY_ID)
-    if not app_package or not app_activity or not capability_id:
-        raise ValueError("Missing mobile app package, activity, or capability id.")
+    platform = state_string(tool_context.state, MobileContextKey.PLATFORM)
+    if not app_package or not app_activity or not capability_id or platform not in {"Android", "iOS"}:
+        raise ValueError("Missing mobile app package, activity, capability id, or supported platform.")
 
     resolved_max_steps = max(int(max_steps), 1)
     resolved_max_activities = max(int(max_activities), 1)
@@ -90,7 +91,7 @@ async def run_mobile_test(
         )
         navigator_data, static_analysis = await run_mobile_pipeline(
             navigator,
-            MobileStaticAnalyzer(),
+            MobileStaticAnalyzer(platform),
             MAX_CONCURRENT_STATIC_ANALYSES,
         )
         navigator_data["report_id"] = report_id

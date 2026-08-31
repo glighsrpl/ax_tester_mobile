@@ -6,7 +6,9 @@ from utils.wcag_helper import get_rule_name_from_axe_tags
 
 WCAG_RULE = get_rule_name_from_axe_tags(["wcag258"])
 MIN_TARGET_SIZE = 48.0
-DEFAULT_SCREEN_DENSITY = 2.75
+DEFAULT_SCREEN_DENSITY = (
+    2.75  # conversion factor from pixels to dp for a 1080x1920 screen with 400dpi (standard)
+)
 INLINE_MAX_HEIGHT = 30.0
 
 
@@ -73,6 +75,7 @@ class TouchTargetConsumer(BaseConsumer):
 
     @staticmethod
     def _is_inline(element: MobileElementInfo, height: float) -> bool:
+        # Exclude inline text elements that are smaller than the minimum size but are not expected to be interactive targets.
         return "textview" in (element.class_name or "").casefold() and height < INLINE_MAX_HEIGHT
 
     @staticmethod

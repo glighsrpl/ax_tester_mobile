@@ -47,11 +47,14 @@ class SnapshotNavigator(Protocol):
 class MobileStaticAnalyzer:
     """Build independent deterministic and LLM reports for one snapshot."""
 
+    def __init__(self, platform: str) -> None:
+        self._platform = platform
+
     async def analyze(self, snapshot: MobileScanSnapshot, snapshot_index: int) -> dict[str, object]:
         snapshot_payload = build_static_snapshot_payload(snapshot, snapshot_index)
         debug_data = build_static_debug_payload(snapshot_payload)
         llm_result, deterministic_result = await asyncio.gather(
-            run_static_snapshot(snapshot_payload),
+            run_static_snapshot(snapshot_payload, self._platform),
             _deterministic_snapshot_report(snapshot),
             return_exceptions=True,
         )

@@ -6,10 +6,7 @@ ANDROID_SDK_ROOT_ENV = "ANDROID_SDK_ROOT"
 
 
 def _adb_bin() -> str:
-    sdk_root = (
-        os.getenv(ANDROID_SDK_ROOT_ENV)
-        or Path(__file__).resolve().parents[3] / "android-sdk"
-    )
+    sdk_root = os.getenv(ANDROID_SDK_ROOT_ENV) or Path(__file__).resolve().parents[3] / "android-sdk"
     adb = Path(sdk_root) / "platform-tools" / "adb"
     return str(adb) if adb.exists() else "adb"
 

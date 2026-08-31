@@ -16,7 +16,12 @@ def get_mobile_static_instruction(tool_context: ToolContext) -> str:
         str(MobileContextKey.NAVIGATOR_DATA),
         {},
     )
-    wcag_prompt = yaml.safe_dump(_mobile_wcag_rules(), sort_keys=False)
+    platform = str(
+        tool_context.state.get(MobileContextKey.PLATFORM)
+        or tool_context.state.get(str(MobileContextKey.PLATFORM))
+        or ""
+    )
+    wcag_prompt = yaml.safe_dump(_mobile_wcag_rules(platform), sort_keys=False)
     return f"""
         Analyze this accessibility snapshot against the supplied WCAG mobile rules.
 
@@ -30,9 +35,8 @@ def get_mobile_static_instruction(tool_context: ToolContext) -> str:
         Return only the Report schema.
         Use source "llm". Put element index, bounds, class, activity, and snapshot_id
         in html_snippet because they are not separate fields in the Issue schema.
-        Infer whether the snapshot is Android or iOS from its accessibility data and
-        apply the matching platform examples; when the platform is not identifiable,
-        apply only platform-agnostic requirements.
+        The tested platform is {platform}. Apply common fixes only as remediation
+        guidance.
 
         WCAG mobile rules:
         {wcag_prompt}
@@ -52,34 +56,28 @@ init_agent = LlmAgent(
 )
 
 
-def _mobile_wcag_rules() -> dict[str, object]:
-    with PROMPT_PATH.open(encoding="utf-8") as file:
-        prompt = yaml.safe_load(file) or {}
-
-    if not isinstance(prompt, dict):
-        return {}
-
+def _mobile_wcag_rules(platform: str = "") -> list[dict[str, object]]:
+    prompt = _mobile_prompt()
     criteria_by_level = prompt.get("levels", {})
     if not isinstance(criteria_by_level, dict):
-        criteria_by_level = {}
+        return []
 
-    success_criteria = [
-        _compact_criterion(criterion)
+    return [
+        _compact_criterion(criterion, platform)
         for level, rules in criteria_by_level.items()
         if isinstance(rules, dict)
         for criterion in rules.get("success_criteria", [])
         if isinstance(criterion, dict) and criterion.get("level") == level
     ]
 
-    return {
-        "wcag_version": prompt.get("wcag_version"),
-        "platforms": ["Android", "iOS"],
-        "levels": list(criteria_by_level),
-        "success_criteria": success_criteria,
-    }
+
+def _mobile_prompt() -> dict[str, object]:
+    with PROMPT_PATH.open(encoding="utf-8") as file:
+        prompt = yaml.safe_load(file) or {}
+    return prompt if isinstance(prompt, dict) else {}
 
 
-def _compact_criterion(criterion: object) -> dict[str, object]:
+def _compact_criterion(criterion: object, platform: str) -> dict[str, object]:
     if not isinstance(criterion, dict):
         return {}
     return {
@@ -88,39 +86,23 @@ def _compact_criterion(criterion: object) -> dict[str, object]:
         "level": criterion.get("level"),
         "rule": _compact_text(criterion.get("description")),
         "mobile_note": _compact_text(criterion.get("mobile_note")),
-        "examples": _compact_examples(criterion.get("examples")),
+        "common_fixes": _platform_common_fixes(criterion.get("common_fixes"), platform),
+        "examples": _platform_examples(criterion.get("examples")),
     }
 
 
-def _compact_examples(examples: object) -> list[dict[str, str]]:
-    if not isinstance(examples, list):
+def _platform_common_fixes(common_fixes: object, platform: str) -> list[dict[str, object]]:
+    if not isinstance(common_fixes, list):
         return []
 
-    selected_examples = _platform_examples(examples) or examples[:1]
-    return [
-        {
-            "platform": str(example.get("context", "")),
-            "example": _compact_text(example.get("description")),
-        }
-        for example in selected_examples[:2]
-        if isinstance(example, dict)
-    ]
+    included_platforms = {platform, "Flutter"}
+    return [fix for fix in common_fixes if isinstance(fix, dict) and fix.get("platform") in included_platforms]
 
 
-def _platform_examples(examples: list[object]) -> list[dict[str, object]]:
-    selected_examples: list[dict[str, object]] = []
-    for platform in ("Android", "iOS"):
-        example = next(
-            (
-                example
-                for example in examples
-                if isinstance(example, dict) and platform in str(example.get("context", ""))
-            ),
-            None,
-        )
-        if example:
-            selected_examples.append(example)
-    return selected_examples
+def _platform_examples(examples: object) -> list[dict[str, object]]:
+    if not isinstance(examples, list):
+        return []
+    return [example for example in examples if isinstance(example, dict)]
 
 
 def _compact_text(value: object) -> str | None:
