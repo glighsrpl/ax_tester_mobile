@@ -1,8 +1,8 @@
+from mobile_agents.utils.tree_sanitizer import detect_framework, sanitize_tree, xml_tree_to_dict
 from mobile_tools.base import MobileElementInfo
 from mobile_tools.screen_scanner import MobileScanSnapshot
 
 MAX_STATIC_ELEMENTS = 120
-MAX_STATIC_TREE_LINES = 120
 MAX_TEXT_CHARS = 160
 
 
@@ -11,12 +11,14 @@ def build_static_snapshot_payload(
     snapshot_index: int,
 ) -> dict[str, object]:
     elements = _relevant_static_elements(snapshot.elements)
+    sanitized_tree = sanitize_tree(xml_tree_to_dict(snapshot.tree_xml))
     return {
         "snapshot_id": snapshot.snapshot_id,
         "snapshot_index": snapshot_index,
         "activity": snapshot.activity,
         "screenshot": snapshot.screenshot,
-        "tree_summary": _limited_tree_summary(elements),
+        "sanitized_tree": sanitized_tree,
+        "framework": detect_framework(sanitized_tree),
         "elements": [_element_payload(element) for element in elements],
     }
 
@@ -28,7 +30,6 @@ def build_static_debug_payload(snapshot_payload: dict[str, object]) -> dict[str,
         "debug": {
             "payload_chars": len(str(snapshot_payload)),
             "element_count": len(elements) if isinstance(elements, list) else 0,
-            "tree_summary_lines": len(str(snapshot_payload.get("tree_summary") or "").splitlines()),
             "has_screenshot": "screenshot" in str(snapshot_payload).lower(),
             "has_tree_xml": "tree_xml" in snapshot_payload,
         },
@@ -53,37 +54,6 @@ def _is_static_relevant(element: MobileElementInfo) -> bool:
 def _is_semantic_class(element: MobileElementInfo) -> bool:
     class_name = (element.class_name or "").casefold()
     return any(name in class_name for name in ("image", "text", "edit", "button", "checkbox", "switch"))
-
-
-def _limited_tree_summary(elements: list[MobileElementInfo]) -> str:
-    return "\n".join(_compact_element_line(element) for element in elements[:MAX_STATIC_TREE_LINES])
-
-
-def _compact_element_line(element: MobileElementInfo) -> str:
-    label = _trim_text(element.get_label()) or "-"
-    return (
-        f"{element.index}: {element.class_name or '-'}"
-        f" id={_trim_text(element.resource_id) or '-'}"
-        f" label={label}"
-        f" bounds={element.bounds or '-'}"
-        f" states={_element_states(element) or '-'}"
-    )
-
-
-def _element_states(element: MobileElementInfo) -> str:
-    return ",".join(
-        state
-        for state, enabled in (
-            ("clickable", element.clickable),
-            ("focusable", element.focusable),
-            ("disabled", not element.enabled),
-            ("selected", element.selected),
-            ("checked", bool(element.checked)),
-            ("expanded", bool(element.expanded)),
-            ("focused", element.focused),
-        )
-        if enabled
-    )
 
 
 def _element_payload(element: MobileElementInfo) -> dict[str, object]:
