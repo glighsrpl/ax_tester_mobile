@@ -10,7 +10,7 @@ from utils.wcag_helper import get_rule_name_from_axe_tags
 
 WCAG_RULE = get_rule_name_from_axe_tags(["wcag258"])
 MIN_TARGET_SIZE = 48.0
-DEFAULT_SCREEN_DENSITY = 2.75
+DEFAULT_SCREEN_DENSITY = 2.75 # default value (1080p screen with 400dp width) to make the test device-independent.
 MIN_SPACING = 24.0
 INLINE_MAX_HEIGHT = 30.0
 

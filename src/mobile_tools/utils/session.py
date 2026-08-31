@@ -17,9 +17,6 @@ ANDROID_HOME_ENV = "ANDROID_HOME"
 ANDROID_SDK_ROOT_ENV = "ANDROID_SDK_ROOT"
 APPIUM_HOME_ENV = "APPIUM_HOME"
 DEFAULT_APPIUM_SERVER_URL = "http://127.0.0.1:4723"
-MOBILE_DEVICE_NAME_ENV = "MOBILE_DEVICE_NAME"
-MOBILE_DEVICE_SERIAL_ENV = "MOBILE_DEVICE_SERIAL"
-MOBILE_PLATFORM_VERSION_ENV = "MOBILE_PLATFORM_VERSION"
 APPIUM_AUTOSTART = True
 APPIUM_LOG_PATH = "logs/appium.log"
 MOBILE_NO_RESET = True
@@ -110,10 +107,7 @@ class MobileSession:
         app_package: str | None = None,
         app_activity: str | None = None,
     ) -> None:
-        serial = (
-            capability_id.removeprefix("local-android:") if capability_id.startswith("local-android:") else ""
-        )
-        serial = serial or os.getenv(MOBILE_DEVICE_SERIAL_ENV, "").strip()
+        serial = capability_id.removeprefix("local-android:") if capability_id.startswith("local-android:") else ""
         global _RUN_LOGS_DIR
         _RUN_LOGS_DIR = _create_mobile_run_logs_dir(app_package)
 
@@ -138,8 +132,6 @@ class MobileSession:
                 options.set_capability("appium:forceAppLaunch", True)
             for key, value in {
                 "appium:udid": serial,
-                "appium:deviceName": os.getenv(MOBILE_DEVICE_NAME_ENV),
-                "appium:platformVersion": os.getenv(MOBILE_PLATFORM_VERSION_ENV),
                 "appium:appPackage": app_package,
                 "appium:appActivity": app_activity,
             }.items():
