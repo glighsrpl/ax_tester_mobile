@@ -12,11 +12,15 @@ from mobile_tools.screen_scanner import MobileScanSnapshot
 from mobile_tools.utils.queue_utils import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
 from mobile_tools.utils.report_utils import (
     deterministic_report,
-    issues_by_activity,
     merge_static_reports,
 )
 from mobile_tools.utils.snapshot_utils import build_static_debug_payload, build_static_snapshot_payload
-from mobile_tools.utils.static_analysis_utils import StaticSnapshotReports, run_mobile_merge, run_static_snapshot
+from mobile_tools.utils.static_analysis_utils import (
+    aggregate_source_reports,
+    empty_llm_reports,
+    merge_reports_by_activity,
+    run_static_snapshot,
+)
 from schemas import Issue, Report
 
 logger = logging.getLogger(__name__)
@@ -119,19 +123,22 @@ async def indexed_snapshots(
 
 async def aggregate_static_analyses(
     analyses: list[SnapshotAnalysis],
-    navigator_data: dict[str, object],
+    navigator_data: Mapping[str, object],
 ) -> StaticAnalysisResult:
-    """Merge source reports and preserve per-activity issues and debug payloads."""
-    deterministic = merge_static_reports(
-        [analysis.deterministic_report for analysis in analyses], len(analyses), tool_name="deterministic"
+    """Merge each activity's source reports and preserve their unique findings."""
+    deterministic, contrast, llm = aggregate_source_reports(analyses, navigator_data.get("snapshot_screenshots"))
+    merged_reports_by_activity = await merge_reports_by_activity(
+        analyses,
+        navigator_data.get("snapshot_screenshots"),
     )
-    contrast = merge_static_reports(
-        [analysis.contrast_report for analysis in analyses], len(analyses), tool_name="contrast_agent"
-    )
-    llm = merge_static_reports([analysis.llm_report for analysis in analyses], len(analyses), tool_name="llm")
-    activity_issues = issues_by_activity(analyses, navigator_data)
+    activity_issues = {activity: report.issue_list for activity, report in merged_reports_by_activity.items()}
     return StaticAnalysisResult(
-        report=await merge_reports(deterministic, contrast, llm, activity_issues),
+        report=merge_static_reports(
+            list(merged_reports_by_activity.values()),
+            len(analyses),
+            activity_issues,
+            tool_name="mobile",
+        ),
         deterministic_report=deterministic,
         contrast_report=contrast,
         llm_report=llm,
@@ -156,40 +163,6 @@ def report_label(value: str) -> str:
     return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"
 
 
-def empty_llm_reports(snapshot: MobileScanSnapshot) -> StaticSnapshotReports:
-    """Return valid empty reports when an LLM analysis cannot complete."""
-    page = f"mobile://{snapshot.activity}"
-    metadata = [{"key": "snapshot_id", "value": snapshot.snapshot_id}]
-    return StaticSnapshotReports(
-        contrast_report=Report(
-            tool_name="contrast_agent",
-            total_issues=0,
-            page=page,
-            issue_list=[],
-            metadata=metadata,
-        ),
-        llm_report=Report(
-            tool_name="llm",
-            total_issues=0,
-            page=page,
-            issue_list=[],
-            metadata=metadata,
-        ),
-    )
-
-
 async def _deterministic_snapshot_report(snapshot: MobileScanSnapshot) -> Report:
     """Adapt deterministic report generation for concurrent awaiting."""
     return deterministic_report(snapshot)
-
-
-async def merge_reports(
-    deterministic: Report,
-    contrast: Report,
-    llm: Report,
-    activity_issues: dict[str, list[Issue]],
-) -> Report:
-    """Return an empty aggregate or ask the LLM to merge source reports."""
-    if not deterministic.issue_list and not contrast.issue_list and not llm.issue_list:
-        return merge_static_reports([], 0, activity_issues, tool_name="mobile")
-    return await run_mobile_merge(deterministic, contrast, llm)

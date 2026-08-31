@@ -44,7 +44,7 @@ def get_mobile_merge_instruction(tool_context: ToolContext) -> str:
 
         8. Set total_issues = count of final unique issues.
 
-        9. Return ONLY the Report schema. Do NOT include input reports. Do NOT discarded duplicates. 
+        9. Return ONLY the Report schema. Do NOT include input reports. Do NOT discarded duplicates.
 
         Deterministic report:
         {json.dumps(deterministic_report, ensure_ascii=False)}
@@ -54,7 +54,8 @@ def get_mobile_merge_instruction(tool_context: ToolContext) -> str:
 
         LLM report:
         {json.dumps(llm_report, ensure_ascii=False)}
-    """ #FIXME: fix rule number 9
+    """
+    # FIXME: fix rule number 9
 
 
 def _state_report(tool_context: ToolContext, key: MobileContextKey) -> dict[str, Any]:
