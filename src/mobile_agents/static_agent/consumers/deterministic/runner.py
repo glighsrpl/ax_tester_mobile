@@ -4,11 +4,10 @@ import importlib
 import inspect
 import pkgutil
 
+from mobile_agents.static_agent.consumers.base import BaseConsumer
 from mobile_tools.base import MobileElementInfo
 from mobile_tools.screen_scanner import MobileScanSnapshot
 from schemas import Issue
-
-from .base import BaseConsumer
 
 
 class DeterministicRunner:
@@ -28,8 +27,7 @@ class DeterministicRunner:
         issues: list[Issue] = []
         for consumer in self.consumers:
             issues.extend(
-                issue.model_copy(update={"source": "deterministic"})
-                for issue in consumer.consume(element)
+                issue.model_copy(update={"source": "deterministic"}) for issue in consumer.consume(element)
             )
         return issues
 

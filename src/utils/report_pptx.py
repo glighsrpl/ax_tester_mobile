@@ -184,7 +184,7 @@ def build_pptx_report(results_dir: str) -> str:
         page_url = str(page_report.get("page", "")).strip()
         page_issues = _sort_issues(_load_all_issues(page_report))
 
-        #if len(page_reports) > 1:
+        # if len(page_reports) > 1:
         page_screenshot_bytes = _get_page_screenshot_bytes(page_report)
         _add_page_separator_slide(
             prs,
@@ -559,11 +559,7 @@ def _add_issue_slide(
     snippet_left = inches(0.4)
     snippet_top = inches(2.5)
     snippet_height = inches(2.00)
-    snippet_width = (
-        content_width
-        if has_portrait_issue_image or issue_image_bytes is None
-        else inches(5.9)
-    )
+    snippet_width = content_width if has_portrait_issue_image or issue_image_bytes is None else inches(5.9)
     snippet_label_width = snippet_width
 
     snippet_label_shape = slide.shapes.add_textbox(inches(0.4), inches(2.93), snippet_label_width, inches(0.3))

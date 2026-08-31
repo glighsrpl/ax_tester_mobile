@@ -11,7 +11,8 @@ WCAG_RULE = get_rule_name_from_axe_tags(["wcag242"])
 GENERIC_TITLES = {"mainactivity", "activity", "fragment", "screen", "home"}
 
 # TODO [Static Agent LLM]: verify title adequately describes screen content (2.4.2)
-# FIXME: not used, for now
+# FIXME: not used, for now; change MobileBaseConsumer with BaseConsumer from mobile_agents.static_agent.consumers.base
+
 
 class PageTitleConsumer(MobileBaseConsumer):
     name = "mobile-page-title-consumer"
