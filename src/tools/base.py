@@ -6,6 +6,8 @@ from enum import StrEnum
 from typing import Any
 
 from schemas import ScoreInfo
+
+
 class ToolStatus(StrEnum):
     """Execution status of a tool"""
 

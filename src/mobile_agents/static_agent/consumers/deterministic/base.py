@@ -2,8 +2,8 @@
 
 from abc import ABC, abstractmethod
 
-from mobile_tools.base import MobileElementInfo
 from schemas import Issue
+from tools.mobile_base import MobileElementInfo
 
 
 class BaseConsumer(ABC):

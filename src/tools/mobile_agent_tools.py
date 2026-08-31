@@ -1,7 +1,7 @@
 from google.adk.tools.tool_context import ToolContext
 
 from common import MobileContextKey
-from mobile_tools.keyboard_scanner import MobileKeyboardScannerTool
+from tools.mobile_keyboard_scanner import MobileKeyboardScannerTool
 
 
 def _state_int(tool_context: ToolContext, key: MobileContextKey, default: int) -> int:

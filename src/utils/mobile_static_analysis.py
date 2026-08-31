@@ -10,11 +10,11 @@ from google.genai import types
 
 from common import MobileContextKey
 from mobile_agents.static_agent import mobile_merge_agent, mobile_static_analysis_agent
-from mobile_tools.screen_scanner import MobileScanSnapshot
-from mobile_tools.utils.contrast_calculator import calculate_contrast_measurements
-from mobile_tools.utils.queue_utils import SnapshotAnalysis
-from mobile_tools.utils.report_utils import merge_static_reports
 from schemas import Issue, Report
+from tools.mobile_screen_scanner import MobileScanSnapshot
+from utils.contrast_calculator import calculate_contrast_measurements
+from utils.mobile_queue import SnapshotAnalysis
+from utils.mobile_report import merge_static_reports
 
 
 @dataclass(frozen=True)

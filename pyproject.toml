@@ -29,7 +29,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["mobile_agents*", "mobile_tools*", "common*", "tools*", "utils*", "schemas*", "assets*"]
+include = ["mobile_agents*", "common*", "tools*", "utils*", "schemas*", "assets*"]
 
 [tool.setuptools.package-data]
 assets = ["templates/*"]

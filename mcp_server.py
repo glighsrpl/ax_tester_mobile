@@ -19,15 +19,14 @@ from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-
 from common import MobileContextKey
-from mobile_tools.mobile_accessibility_service import (
+from tools.mobile_accessibility_service import (
     MobileAccessibilityScanRequest,
     MobileAccessibilityScanResult,
     run_mobile_accessibility_scan,
 )
-from mobile_tools.saver_tool import run_save_mobile
-from mobile_tools.utils.capabilities import discover_mobile_capabilities
+from tools.mobile_saver_tool import run_save_mobile
+from utils.mobile_capabilities import discover_mobile_capabilities
 from utils.report_store import (
     build_report_manifest,
     get_report_file_metadata,
@@ -94,7 +93,7 @@ def _report_embedded_content(
     ], metadata
 
 
-def _build_run_mobile_test_result(result: dict[str, Any]) -> mcp_types.CallToolResult:
+def _build_mobile_scan_result(result: dict[str, Any]) -> mcp_types.CallToolResult:
     report_artifact = result.get("report_artifact")
     if not isinstance(report_artifact, dict) or not report_artifact.get("report_id"):
         return _error_result(
@@ -202,7 +201,7 @@ async def run_full_mobile_test(
         scan_result = await run_mobile_accessibility_scan(request)
         result = _mcp_scan_result(request, scan_result)
         result["report_artifact"] = run_save_mobile(_scan_state(request, scan_result))
-        return _build_run_mobile_test_result(result)
+        return _build_mobile_scan_result(result)
     except Exception as exc:
         return _error_result(str(exc), {"capability_id": capability_id})
 

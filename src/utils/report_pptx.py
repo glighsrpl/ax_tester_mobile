@@ -22,7 +22,7 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
-from mobile_tools.utils.screenshot_annotations import annotate_screenshot, parse_bounds
+from utils.screenshot_annotations import annotate_screenshot, parse_bounds
 from utils.wcag_helper import WCAG_RULE_MAPPER, get_wcag_level
 
 logger = logging.getLogger(__name__)

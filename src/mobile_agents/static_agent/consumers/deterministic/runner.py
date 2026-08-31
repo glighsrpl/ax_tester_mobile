@@ -5,9 +5,9 @@ import inspect
 import pkgutil
 
 from mobile_agents.static_agent.consumers.base import BaseConsumer, BaseSnapshotConsumer
-from mobile_tools.base import MobileElementInfo
-from mobile_tools.screen_scanner import MobileScanSnapshot
 from schemas import Issue
+from tools.mobile_base import MobileElementInfo
+from tools.mobile_screen_scanner import MobileScanSnapshot
 
 
 class DeterministicRunner:

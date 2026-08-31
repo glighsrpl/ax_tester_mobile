@@ -3,8 +3,8 @@
 import re
 
 from mobile_agents.static_agent.consumers.base import BaseSnapshotConsumer
-from mobile_tools.screen_scanner import MobileScanSnapshot
 from schemas import Issue
+from tools.mobile_screen_scanner import MobileScanSnapshot
 from utils.wcag_helper import get_rule_name_from_axe_tags
 
 WCAG_RULE = get_rule_name_from_axe_tags(["wcag242"])

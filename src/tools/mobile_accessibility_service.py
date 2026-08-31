@@ -1,16 +1,15 @@
 """Deterministic MCP service for touch-based mobile accessibility scans."""
 
 from dataclasses import dataclass
-from typing import Any
 
-from mobile_tools.screen_scanner import MobileScreenScannerTool
-from mobile_tools.saver_tool import generate_run_timestamp
-from mobile_tools.utils.mobile_pipeline import (
+from tools.mobile_saver_tool import generate_run_timestamp
+from tools.mobile_screen_scanner import MobileScreenNavigator
+from utils.mobile_pipeline import (
     MobileStaticAnalyzer,
     run_mobile_pipeline,
 )
-from mobile_tools.utils.report_utils import save_source_reports
-from mobile_tools.utils.session import MobileSession, mobile_session
+from utils.mobile_report import save_source_reports
+from utils.mobile_session import MobileSession, mobile_session
 from utils.report_store import REPORTS_ROOT
 
 MAX_CONCURRENT_STATIC_ANALYSES = 4
@@ -82,7 +81,7 @@ async def _collect_and_analyze(
     request: MobileAccessibilityScanRequest,
 ) -> MobileAccessibilityScanResult:
     report_id = f"{generate_run_timestamp()}_{_report_label(request.app_package)}"
-    navigator = MobileScreenScannerTool(
+    navigator = MobileScreenNavigator(
         {
             "max_steps": request.max_steps,
             "max_activities": request.max_activities,

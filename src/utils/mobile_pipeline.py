@@ -6,18 +6,18 @@ from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from mobile_tools.screen_scanner import MobileScanSnapshot
-from mobile_tools.utils.queue_utils import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
-from mobile_tools.utils.report_utils import deterministic_report
-from mobile_tools.utils.snapshot_utils import build_static_debug_payload, build_static_snapshot_payload
-from mobile_tools.utils.static_analysis_utils import (
+from schemas import Issue, Report
+from tools.mobile_screen_scanner import MobileScanSnapshot
+from utils.mobile_queue import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
+from utils.mobile_report import deterministic_report
+from utils.mobile_snapshot import build_static_debug_payload, build_static_snapshot_payload
+from utils.mobile_static_analysis import (
     aggregate_source_reports,
     empty_llm_reports,
     group_merged_issues_by_activity,
     run_mobile_merge,
     run_static_snapshot,
 )
-from schemas import Issue, Report
 
 logger = logging.getLogger(__name__)
 

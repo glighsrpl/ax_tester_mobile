@@ -1,7 +1,7 @@
 from mobile_agents.static_agent.consumers.base import BaseConsumer
-from mobile_tools.base import MobileElementInfo
-from mobile_tools.tree import bounds_size
 from schemas import Issue
+from tools.mobile_base import MobileElementInfo
+from tools.mobile_tree import bounds_size
 from utils.wcag_helper import get_rule_name_from_axe_tags
 
 WCAG_RULE = get_rule_name_from_axe_tags(["wcag258"])

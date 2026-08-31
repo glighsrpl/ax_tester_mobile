@@ -3,8 +3,8 @@ import logging
 from dataclasses import dataclass
 from typing import Protocol
 
-from mobile_tools.screen_scanner import MobileScanSnapshot
 from schemas import Report
+from tools.mobile_screen_scanner import MobileScanSnapshot
 
 logger = logging.getLogger(__name__)
 

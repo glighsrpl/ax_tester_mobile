@@ -3,8 +3,8 @@ from collections.abc import Iterable
 from pathlib import Path
 
 from mobile_agents.static_agent.deterministic_consumers import run_deterministic_analysis
-from mobile_tools.screen_scanner import MobileScanSnapshot
 from schemas import Issue, Report, ScoreInfo
+from tools.mobile_screen_scanner import MobileScanSnapshot
 
 
 def deterministic_report(snapshot: MobileScanSnapshot) -> Report:

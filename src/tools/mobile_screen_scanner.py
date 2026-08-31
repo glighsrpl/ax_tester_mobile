@@ -12,10 +12,9 @@ from typing import Any
 from uuid import uuid4
 from xml.etree import ElementTree
 
-from mobile_tools.base import MobileElementInfo, is_in_place_control
-from mobile_tools.tree import bounds_center, bounds_size, get_interactive_elements, parse_mobile_tree
-from mobile_tools.utils.session import MOBILE_SESSION, get_mobile_run_logs_dir
-from tools.base import Tool, ToolResult, ToolStatus
+from tools.mobile_base import MobileElementInfo, is_in_place_control
+from tools.mobile_tree import bounds_center, bounds_size, get_interactive_elements, parse_mobile_tree
+from utils.mobile_session import MOBILE_SESSION, get_mobile_run_logs_dir
 
 logger = logging.getLogger(__name__)
 
@@ -64,17 +63,17 @@ class MobileScreenNavigationResult:
         }
 
 
-class MobileScreenScannerTool(Tool):
+class MobileScreenNavigator:
     """Navigate mobile screens and collect scan snapshots."""
 
     def __init__(self, config: dict[str, Any] | None = None):
-        super().__init__(config)
-        self.max_steps = int(self.config.get("max_steps", 50))
-        self.max_activities = int(self.config.get("max_activities", 3))
-        self.max_depth = int(self.config.get("max_depth", 5))
-        self.target_app_package = self.config.get("target_app_package")
-        self.screenshot_output_dir = self.config.get("screenshot_output_dir")
-        self.run_id = self.config.get("run_id")
+        config = config or {}
+        self.max_steps = int(config.get("max_steps", 50))
+        self.max_activities = int(config.get("max_activities", 3))
+        self.max_depth = int(config.get("max_depth", 5))
+        self.target_app_package = config.get("target_app_package")
+        self.screenshot_output_dir = config.get("screenshot_output_dir")
+        self.run_id = config.get("run_id")
         self._snapshots: list[MobileScanSnapshot] = []
         self._seen_activities: set[str] = set()
         self._seen_screens: set[str] = set()
@@ -91,42 +90,6 @@ class MobileScreenScannerTool(Tool):
         self._step_limit = self.max_steps
         self._snapshot_index = 0
         self._snapshot_queue: asyncio.Queue[MobileScanSnapshot | None] | None = None
-
-    async def execute(self, **kwargs: Any) -> ToolResult:
-        try:
-            self._configure_screenshot_output(kwargs)
-            await self.scan_screen(
-                max_steps=int(kwargs.get("max_steps", self.max_steps)),
-                max_activities=int(kwargs.get("max_activities", self.max_activities)),
-                max_depth=int(kwargs.get("max_depth", self.max_depth)),
-                target_app_package=kwargs.get("target_app_package", self.target_app_package),
-            )
-            data = self.result()
-            return ToolResult(
-                tool_name="mobile-screen-scanner",
-                status=ToolStatus.SUCCESS,
-                data=data,
-                metadata={"activity_count": len(data["visited_activities"])},
-            )
-        except Exception as exc:
-            logger.exception("Mobile screen scanner failed")
-            return ToolResult("mobile-screen-scanner", ToolStatus.FAILURE, {}, error=str(exc))
-
-    async def scan_screen(
-        self,
-        *,
-        max_steps: int | None = None,
-        max_activities: int | None = None,
-        max_depth: int | None = None,
-        target_app_package: str | None = None,
-    ) -> None:
-        async for _ in self.navigate(
-            max_steps=max_steps,
-            max_activities=max_activities,
-            max_depth=max_depth,
-            target_app_package=target_app_package,
-        ):
-            pass
 
     async def navigate(
         self,
@@ -622,10 +585,6 @@ class MobileScreenScannerTool(Tool):
 
         return True, current_hash
 
-    def is_screen_known(self, tree_xml: str) -> bool:
-        """Return whether an accessibility tree has already been scanned."""
-        return self._screen_hash(tree_xml) in self._seen_screens
-
     def _record_activity(self, snapshot: MobileScanSnapshot, activity_limit: int) -> bool:
         activity = self._activity_name(snapshot)
         if activity in self._seen_activities:
@@ -663,9 +622,9 @@ class MobileScreenScannerTool(Tool):
         for node in root.iter():
             if (node.attrib.get("scrollable") or "").strip().casefold() not in {"true", "1"}:
                 continue
-            class_name = MobileScreenScannerTool._node_attr(node, "class", "className", "type").casefold()
-            resource_id = MobileScreenScannerTool._node_attr(node, "resource-id", "resourceId")
-            bounds = MobileScreenScannerTool._node_attr(node, "bounds")
+            class_name = MobileScreenNavigator._node_attr(node, "class", "className", "type").casefold()
+            resource_id = MobileScreenNavigator._node_attr(node, "resource-id", "resourceId")
+            bounds = MobileScreenNavigator._node_attr(node, "bounds")
             known_class = any(name in class_name for name in _HORIZONTAL_CONTAINER_CLASSES)
             try:
                 width, height = bounds_size(bounds)
@@ -707,10 +666,6 @@ class MobileScreenScannerTool(Tool):
             path=tuple(self._path),
             steps=self._step,
         ).as_dict()
-
-    def _configure_screenshot_output(self, options: dict[str, Any]) -> None:
-        self.screenshot_output_dir = options.get("screenshot_output_dir", self.screenshot_output_dir)
-        self.run_id = options.get("run_id", self.run_id)
 
     def _persist_screenshot(
         self,

@@ -2,9 +2,9 @@
 
 from abc import ABC, abstractmethod
 
-from mobile_tools.base import MobileElementInfo
-from mobile_tools.screen_scanner import MobileScanSnapshot
 from schemas import Issue
+from tools.mobile_base import MobileElementInfo
+from tools.mobile_screen_scanner import MobileScanSnapshot
 
 
 class BaseConsumer(ABC):

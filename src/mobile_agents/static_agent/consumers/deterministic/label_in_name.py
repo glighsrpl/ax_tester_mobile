@@ -1,8 +1,8 @@
 import unicodedata
 
 from mobile_agents.static_agent.consumers.base import BaseConsumer
-from mobile_tools.base import MobileElementInfo
 from schemas import Issue
+from tools.mobile_base import MobileElementInfo
 from utils.wcag_helper import get_rule_name_from_axe_tags
 
 WCAG_RULE = get_rule_name_from_axe_tags(["wcag253"])

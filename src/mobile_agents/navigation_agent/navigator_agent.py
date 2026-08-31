@@ -1,7 +1,7 @@
 from google.adk.agents.llm_agent import LlmAgent
 
 from common import MODEL
-from mobile_tools.agent_tools import run_mobile_keyboard_navigation
+from tools.mobile_agent_tools import run_mobile_keyboard_navigation
 
 MOBILE_NAVIGATOR_INSTRUCTION = """
 You collect keyboard-navigation evidence for mobile accessibility testing.

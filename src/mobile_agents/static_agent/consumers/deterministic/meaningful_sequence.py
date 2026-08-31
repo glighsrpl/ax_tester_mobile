@@ -1,10 +1,10 @@
 """Deterministic check for WCAG 1.3.2 meaningful sequence."""
 
 from mobile_agents.static_agent.consumers.base import BaseSnapshotConsumer
-from mobile_tools.base import MobileElementInfo
-from mobile_tools.screen_scanner import MobileScanSnapshot
-from mobile_tools.tree import BOUNDS_RE
 from schemas import Issue
+from tools.mobile_base import MobileElementInfo
+from tools.mobile_screen_scanner import MobileScanSnapshot
+from tools.mobile_tree import BOUNDS_RE
 from utils.wcag_helper import get_rule_name_from_axe_tags
 
 WCAG_RULE = get_rule_name_from_axe_tags(["wcag132"])
