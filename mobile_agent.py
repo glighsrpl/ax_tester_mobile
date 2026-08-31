@@ -1,22 +1,22 @@
 """ADK entrypoint for the mobile ax-tester agent."""
 
+import asyncio
 import logging
-from collections.abc import Iterable
+from collections.abc import AsyncGenerator, Iterable
 from dataclasses import dataclass
+from typing import Protocol
 from uuid import uuid4
 
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.agents.sequential_agent import SequentialAgent
-from google.adk.runners import InMemoryRunner, Runner
-from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from google.adk.runners import InMemoryRunner
 from google.adk.tools.tool_context import ToolContext
-from google.adk.utils.context_utils import Aclosing
 from google.genai import types
 
 from common import MODEL, MobileContextKey
-from mobile_agents.navigation_agent import mobile_navigator_agent
 from mobile_agents.static_agent import mobile_static_analysis_agent
 from mobile_tools.base import MobileElementInfo
+from mobile_tools.guided_navigator import MobileGuidedNavigatorTool
+from mobile_tools.screen_scanner import MobileScanSnapshot, MobileScreenScannerTool
 from mobile_tools.utils.session import MOBILE_SESSION
 from schemas import Issue, Report, ScoreInfo
 
@@ -25,20 +25,50 @@ logger = logging.getLogger(__name__)
 MAX_STATIC_ELEMENTS = 120
 MAX_STATIC_TREE_LINES = 120
 MAX_TEXT_CHARS = 160
-MAX_KEYBOARD_TRAPS = 10
-
-
-@dataclass(frozen=True)
-class _StaticSnapshotScope:
-    index: int
-    total: int
-    keyboard_results: object
 
 
 @dataclass(frozen=True)
 class _StaticAnalysisResult:
     report: Report
     debug_data: list[dict[str, object]]
+
+
+@dataclass(frozen=True)
+class _SnapshotAnalysis:
+    report: Report
+    debug_data: dict[str, object]
+
+
+@dataclass(frozen=True)
+class _PipelineQueues:
+    static: asyncio.Queue[MobileScanSnapshot | None]
+    semantic: asyncio.Queue[MobileScanSnapshot | None]
+
+
+class _SnapshotNavigator(Protocol):
+    def navigate(self) -> AsyncGenerator[MobileScanSnapshot, None]: ...
+
+    def result(self) -> dict[str, object]: ...
+
+
+class _StaticAnalyzer(Protocol):
+    async def analyze(self, snapshot: MobileScanSnapshot) -> dict[str, object]: ...
+
+
+class _MobileStaticAnalyzer:
+    def __init__(self) -> None:
+        self._snapshot_index = 0
+
+    async def analyze(self, snapshot: MobileScanSnapshot) -> dict[str, object]:
+        snapshot_payload = _static_snapshot_payload(
+            snapshot,
+            self._snapshot_index,
+        )
+        self._snapshot_index += 1
+        return {
+            "report": await _run_static_snapshot(snapshot_payload),
+            "debug_data": _static_debug_payload(snapshot_payload),
+        }
 
 
 MOBILE_ROOT_AGENT_INSTRUCTION = """
@@ -79,7 +109,6 @@ async def run_mobile_test(
     tool_context.state[MobileContextKey.MAX_DEPTH] = resolved_max_depth
     tool_context.state[MobileContextKey.INSTRUCTIONS] = resolved_instructions
 
-    # Connect to the mobile device and retrieve the current accessibility tree
     await MOBILE_SESSION.connect(
         capability_id,
         app_package=app_package,
@@ -94,81 +123,26 @@ async def run_mobile_test(
     if not page_source or len(page_source) < 100:
         raise RuntimeError(f"Empty UI tree from device {serial}, session may not be ready")
 
-    session_service = InMemorySessionService()
-    runner = Runner(
-        app_name="mobile_ax_tester_internal",
-        agent=mobile_tester_agent,
-        session_service=session_service,
-    )
-    session_id = str(uuid4())
-    state_copy = {
-        str(MobileContextKey.APP_PACKAGE): app_package,
-        str(MobileContextKey.APP_ACTIVITY): app_activity,
-        str(MobileContextKey.CAPABILITY_ID): capability_id,
-        str(MobileContextKey.MAX_STEPS): resolved_max_steps,
-        str(MobileContextKey.MAX_ACTIVITIES): resolved_max_activities,
-        str(MobileContextKey.MAX_DEPTH): resolved_max_depth,
-        str(MobileContextKey.INSTRUCTIONS): resolved_instructions,
-    }
-    logger.info(
-        "Running mobile sub-runner with state keys=%s and page_source length=%s",
-        list(state_copy.keys()),
-        len(page_source),
-    )
-    await session_service.create_session(
-        app_name="mobile_ax_tester_internal",
-        user_id="mobile_user",
-        session_id=session_id,
-        state=state_copy,
-    )
-
-    prefix = (
-        f"Follow these mobile navigation instructions: {resolved_instructions}\n\n"
-        if resolved_instructions
-        else ""
-    )
-    content = types.Content(
-        role="user",
-        parts=[
-            types.Part(
-                text=(
-                    prefix
-                    + "Run the Android mobile accessibility navigator now.\n\n"
-                    + f"Current screen UI tree:\n{page_source[:50000]}"
-                )
-            )
-        ],
-    )
-    final_response = ""
     try:
-        async with Aclosing(
-            runner.run_async(
-                user_id="mobile_user",
-                session_id=session_id,
-                new_message=content,
-            )
-        ) as event_stream:
-            async for event in event_stream:
-                if event.content and event.content.parts and (event.author or "").lower() != "user":
-                    final_response = "".join(part.text or "" for part in event.content.parts).strip()
-    except Exception as exc:
-        logger.exception("Mobile sub-runner failed")
-        raise RuntimeError(f"Mobile sub-runner failed: {exc}") from exc
+        guided_path = await _run_guided_navigation(resolved_instructions, resolved_max_steps)
+        navigator = MobileScreenScannerTool(
+            {
+                "max_steps": resolved_max_steps,
+                "max_activities": resolved_max_activities,
+                "max_depth": resolved_max_depth,
+                "target_app_package": app_package,
+            }
+        )
+        navigator_data, static_analysis = await _run_mobile_pipeline(navigator, _MobileStaticAnalyzer())
+        navigator_data["path"] = [*guided_path, *navigator_data.get("path", [])]
+    finally:
+        try:
+            await MOBILE_SESSION.terminate_app(app_package)
+        except Exception:
+            logger.warning("Unable to terminate app %s", app_package, exc_info=True)
+        await MOBILE_SESSION.disconnect()
 
-    session = await session_service.get_session(
-        app_name="mobile_ax_tester_internal",
-        user_id="mobile_user",
-        session_id=session_id,
-    )
-    state = dict(session.state) if session else {}
-    navigator_data = state.get(MobileContextKey.NAVIGATOR_DATA) or state.get(
-        str(MobileContextKey.NAVIGATOR_DATA)
-    )
-    if isinstance(navigator_data, dict):
-        tool_context.state[MobileContextKey.NAVIGATOR_DATA] = navigator_data
-
-    # Run static accessibility analysis on the collected snapshots and store results
-    static_analysis = await _run_static_analysis(navigator_data)
+    tool_context.state[MobileContextKey.NAVIGATOR_DATA] = navigator_data
     static_results = static_analysis.report.model_dump(mode="json")
     tool_context.state[MobileContextKey.STATIC_RESULTS] = static_results
     tool_context.state[MobileContextKey.STATIC_DEBUG_DATA] = static_analysis.debug_data
@@ -176,16 +150,10 @@ async def run_mobile_test(
     return {
         "status": "success",
         "activities": _activity_count(navigator_data) if isinstance(navigator_data, dict) else 1,
-        "final_response": final_response,
+        "final_response": "Mobile navigation and static analysis completed.",
         "static_results": static_results,
     }
 
-
-mobile_tester_agent = SequentialAgent(
-    name="MobileAccessibilityTesterAgent",
-    description="Runs Android mobile accessibility navigation.",
-    sub_agents=[mobile_navigator_agent],
-)
 
 mobile_root_agent = LlmAgent(
     name="MobileRootAgent",
@@ -205,25 +173,56 @@ def _activity_count(data: dict[str, object]) -> int:
     return len(activities) if isinstance(activities, list) else 0
 
 
-async def _run_static_analysis(navigator_data: object) -> _StaticAnalysisResult:
-    raw_snapshots = navigator_data.get("snapshots") if isinstance(navigator_data, dict) else None
-    if not isinstance(raw_snapshots, list) or not raw_snapshots:
-        logger.warning("Mobile navigator returned no snapshots; skipping static analysis")
-        return _StaticAnalysisResult(report=_empty_static_report(), debug_data=[])
+async def _run_guided_navigation(instructions: str, max_steps: int) -> list[str]:
+    if not instructions:
+        return []
+    result = await MobileGuidedNavigatorTool({"instructions": instructions, "max_steps": max_steps}).execute()
+    if not result.is_success():
+        raise RuntimeError(result.error or "Mobile guided navigation failed.")
+    return result.data.get("path", []) if isinstance(result.data, dict) else []
 
-    reports: list[Report] = []
-    debug_data: list[dict[str, object]] = []
-    total_snapshots = len(raw_snapshots)
-    keyboard_results = navigator_data.get("keyboard_results") if isinstance(navigator_data, dict) else None
-    for index, raw_snapshot in enumerate(raw_snapshots):
-        snapshot_payload = _static_snapshot_payload(
-            raw_snapshot,
-            _StaticSnapshotScope(index=index, total=total_snapshots, keyboard_results=keyboard_results),
-        )
-        debug_data.append(_static_debug_payload(snapshot_payload))
-        reports.append(await _run_static_snapshot(snapshot_payload))
 
-    return _StaticAnalysisResult(report=_merge_static_reports(reports, total_snapshots), debug_data=debug_data)
+async def _run_mobile_pipeline(
+    navigator: _SnapshotNavigator,
+    static_agent: _StaticAnalyzer,
+) -> tuple[dict[str, object], _StaticAnalysisResult]:
+    queues = _PipelineQueues(static=asyncio.Queue(), semantic=asyncio.Queue())
+    static_task = asyncio.create_task(_consume_static_snapshots(queues.static, static_agent))
+    snapshots: list[MobileScanSnapshot] = []
+    analyses: list[_SnapshotAnalysis] = []
+    try:
+        async for snapshot in navigator.navigate():
+            snapshots.append(snapshot)
+            await queues.static.put(snapshot)
+    finally:
+        await queues.static.put(None)
+        analyses = await static_task
+
+    navigator_data = navigator.result()
+    navigator_data["snapshots"] = snapshots
+    reports = [analysis.report for analysis in analyses]
+    return navigator_data, _StaticAnalysisResult(
+        report=_merge_static_reports(reports, len(snapshots)),
+        debug_data=[analysis.debug_data for analysis in analyses],
+    )
+
+
+async def _consume_static_snapshots(
+    queue: asyncio.Queue[MobileScanSnapshot | None],
+    static_agent: _StaticAnalyzer,
+) -> list[_SnapshotAnalysis]:
+    analyses: list[_SnapshotAnalysis] = []
+    while (snapshot := await queue.get()) is not None:
+        try:
+            result = await static_agent.analyze(snapshot)
+            report = result.get("report")
+            debug_data = result.get("debug_data")
+            if not isinstance(report, Report) or not isinstance(debug_data, dict):
+                raise TypeError("Static snapshot analysis returned an invalid result.")
+            analyses.append(_SnapshotAnalysis(report=report, debug_data=debug_data))
+        except Exception:
+            logger.exception("Static analysis failed for mobile snapshot; continuing pipeline")
+    return analyses
 
 
 async def _run_static_snapshot(snapshot_payload: dict[str, object]) -> Report:
@@ -257,45 +256,31 @@ async def _run_static_snapshot(snapshot_payload: dict[str, object]) -> Report:
 
 
 def _static_snapshot_payload(
-    raw_snapshot: object,
-    scope: _StaticSnapshotScope,
+    snapshot: MobileScanSnapshot,
+    snapshot_index: int,
 ) -> dict[str, object]:
-    elements = _relevant_static_elements(_snapshot_elements(raw_snapshot))
-    activity = _snapshot_value(raw_snapshot, "activity") or ""
-    snapshot_id = str(uuid4())
+    elements = _relevant_static_elements(snapshot.elements)
     return {
-        "snapshot_id": snapshot_id,
-        "snapshot_index": scope.index,
-        "total_snapshots": scope.total,
-        "activity": activity,
+        "snapshot_id": str(uuid4()),
+        "snapshot_index": snapshot_index,
+        "activity": snapshot.activity,
         "tree_summary": _limited_tree_summary(elements),
         "elements": [_element_payload(element) for element in elements],
-        "keyboard_result": _keyboard_result_for_activity(scope.keyboard_results, activity),
     }
 
 
 def _static_debug_payload(snapshot_payload: dict[str, object]) -> dict[str, object]:
+    elements = snapshot_payload.get("elements")
     return {
         **snapshot_payload,
         "debug": {
             "payload_chars": len(str(snapshot_payload)),
-            "element_count": _list_count(snapshot_payload.get("elements")),
+            "element_count": len(elements) if isinstance(elements, list) else 0,
             "tree_summary_lines": len(str(snapshot_payload.get("tree_summary") or "").splitlines()),
             "has_screenshot": "screenshot" in str(snapshot_payload).lower(),
             "has_tree_xml": "tree_xml" in snapshot_payload,
         },
     }
-
-
-def _snapshot_elements(raw_snapshot: object) -> list[MobileElementInfo]:
-    elements = _snapshot_value(raw_snapshot, "elements")
-    return elements if isinstance(elements, list) else []
-
-
-def _snapshot_value(raw_snapshot: object, name: str) -> object:
-    if isinstance(raw_snapshot, dict):
-        return raw_snapshot.get(name)
-    return getattr(raw_snapshot, name, None)
 
 
 def _relevant_static_elements(elements: list[MobileElementInfo]) -> list[MobileElementInfo]:
@@ -372,48 +357,11 @@ def _element_payload(element: MobileElementInfo) -> dict[str, object]:
     }
 
 
-def _keyboard_result_for_activity(keyboard_results: object, activity: str) -> object:
-    if not isinstance(keyboard_results, list):
-        return None
-    keyboard_result = next(
-        (
-            keyboard_result
-            for keyboard_result in keyboard_results
-            if isinstance(keyboard_result, dict) and keyboard_result.get("activity") == activity
-        ),
-        None,
-    )
-    return _compact_keyboard_result(keyboard_result)
-
-
 def _trim_text(value: object) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text[:MAX_TEXT_CHARS] if text else None
-
-
-def _compact_keyboard_result(keyboard_result: object) -> dict[str, object] | None:
-    if not isinstance(keyboard_result, dict):
-        return None
-    return {
-        "activity": _trim_text(keyboard_result.get("activity")),
-        "reachable_count": _list_count(keyboard_result.get("reachable")),
-        "unreachable_count": _list_count(keyboard_result.get("unreachable")),
-        "focus_order_count": _list_count(keyboard_result.get("focus_order")),
-        "trap_count": _list_count(keyboard_result.get("traps")),
-        "traps": _compact_keyboard_traps(keyboard_result.get("traps")),
-    }
-
-
-def _list_count(value: object) -> int:
-    return len(value) if isinstance(value, list) else 0
-
-
-def _compact_keyboard_traps(traps: object) -> list[str]:
-    if not isinstance(traps, list):
-        return []
-    return [_trim_text(trap) or "" for trap in traps[:MAX_KEYBOARD_TRAPS]]
 
 
 def _merge_static_reports(reports: list[Report], total_snapshots: int) -> Report:
@@ -445,13 +393,3 @@ def _sum_scores(scores: Iterable[ScoreInfo]) -> ScoreInfo:
             total.level_AA += score.level_AA
             total.level_AAA += score.level_AAA
     return total
-
-
-def _empty_static_report() -> Report:
-    return Report(
-        tool_name="llm",
-        total_issues=0,
-        page="mobile",
-        issue_list=[],
-        metadata=[{"key": "snapshots", "value": 0}],
-    )

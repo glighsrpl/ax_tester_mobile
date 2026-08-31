@@ -1,6 +1,9 @@
+import asyncio
 import hashlib
 import logging
 from collections import deque
+from collections.abc import AsyncGenerator
+from contextlib import suppress
 from dataclasses import dataclass, replace
 from typing import Any
 from xml.etree import ElementTree
@@ -48,6 +51,7 @@ class MobileScreenScannerTool(Tool):
         self._step = 0
         self._step_limit = self.max_steps
         self._snapshot_index = 0
+        self._snapshot_queue: asyncio.Queue[MobileScanSnapshot | None] | None = None
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         try:
@@ -69,6 +73,71 @@ class MobileScreenScannerTool(Tool):
             return ToolResult("mobile-screen-scanner", ToolStatus.FAILURE, {}, error=str(exc))
 
     async def scan_screen(
+        self,
+        *,
+        max_steps: int | None = None,
+        max_activities: int | None = None,
+        max_depth: int | None = None,
+        target_app_package: str | None = None,
+    ) -> None:
+        async for snapshot in self.navigate(
+            max_steps=max_steps,
+            max_activities=max_activities,
+            max_depth=max_depth,
+            target_app_package=target_app_package,
+        ):
+            self._snapshots.append(snapshot)
+
+    async def navigate(
+        self,
+        *,
+        max_steps: int | None = None,
+        max_activities: int | None = None,
+        max_depth: int | None = None,
+        target_app_package: str | None = None,
+    ) -> AsyncGenerator[MobileScanSnapshot, None]:
+        """Yield each unique snapshot while the existing BFS traversal runs."""
+        snapshot_queue: asyncio.Queue[MobileScanSnapshot | None] = asyncio.Queue()
+        self._snapshot_queue = snapshot_queue
+        navigation_task = asyncio.create_task(
+            self._navigate(
+                max_steps=max_steps,
+                max_activities=max_activities,
+                max_depth=max_depth,
+                target_app_package=target_app_package,
+            )
+        )
+        try:
+            while (snapshot := await snapshot_queue.get()) is not None:
+                yield snapshot
+            await navigation_task
+        finally:
+            self._snapshot_queue = None
+            if not navigation_task.done():
+                navigation_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await navigation_task
+
+    async def _navigate(
+        self,
+        *,
+        max_steps: int | None = None,
+        max_activities: int | None = None,
+        max_depth: int | None = None,
+        target_app_package: str | None = None,
+    ) -> None:
+        try:
+            await self._run_navigation(
+                max_steps=max_steps,
+                max_activities=max_activities,
+                max_depth=max_depth,
+                target_app_package=target_app_package,
+            )
+        finally:
+            if self._snapshot_queue is not None:
+                self._snapshot_queue.put_nowait(None)
+
+    async def _run_navigation(
         self,
         *,
         max_steps: int | None = None,
@@ -197,7 +266,7 @@ class MobileScreenScannerTool(Tool):
         self._screen_activities.setdefault(dialog_hash, self._activity_name(snapshot))
         if dialog_hash not in self._seen_screens:
             self._seen_screens.add(dialog_hash)
-            self._snapshots.append(snapshot)
+            self._emit_snapshot(snapshot)
 
         await self._back()
         await self._ensure_scope(target_app_package)
@@ -453,7 +522,7 @@ class MobileScreenScannerTool(Tool):
                 if len(new_elements) == len(snapshot.elements)
                 else replace(snapshot, elements=new_elements)
             )
-            self._snapshots.append(unique_snapshot)
+            self._emit_snapshot(unique_snapshot)
 
         if depth >= depth_limit:
             return
@@ -605,6 +674,11 @@ class MobileScreenScannerTool(Tool):
             "keyboard_results": self._keyboard_results,
             "snapshots": self._snapshots,
         }
+
+    def _emit_snapshot(self, snapshot: MobileScanSnapshot) -> None:
+        if self._snapshot_queue is None:
+            raise RuntimeError("Mobile navigation snapshot stream is not active.")
+        self._snapshot_queue.put_nowait(snapshot)
 
     async def _ensure_scope(self, target_app_package: str | None) -> None:
         if target_app_package and await MOBILE_SESSION.get_current_package() != target_app_package:

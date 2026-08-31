@@ -192,42 +192,48 @@ class MobileAgentBridge:
 
     async def run_turn(self, state: dict[str, Any]) -> dict[str, Any]:
         async with self.lock:
-            self._ensure_runner()
-            session_id = str(uuid.uuid4())
-            await self.session_service.create_session(
-                app_name="mobile_ax_tester_mcp",
-                user_id=USER_ID,
-                session_id=session_id,
-                state=state,
-            )
+            try:
+                return await self._run_turn_locked(state)
+            finally:
+                await MOBILE_SESSION.disconnect()
 
-            max_steps = state.get(str(MobileContextKey.MAX_STEPS), 50)
-            max_activities = state.get(str(MobileContextKey.MAX_ACTIVITIES), 3)
-            max_depth = state.get(str(MobileContextKey.MAX_DEPTH), 5)
-            instructions = str(state.get(str(MobileContextKey.INSTRUCTIONS)) or "")
-            instruction_arg = repr(instructions)
-            content = genai_types.Content(
-                role="user",
-                parts=[
-                    genai_types.Part(
-                        text=(
-                            "Run the mobile accessibility test now. "
-                            f"Call run_mobile_test with max_steps={max_steps}, instructions={instruction_arg}, "
-                            f"max_activities={max_activities}, max_depth={max_depth}."
-                        )
+    async def _run_turn_locked(self, state: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_runner()
+        session_id = str(uuid.uuid4())
+        await self.session_service.create_session(
+            app_name="mobile_ax_tester_mcp",
+            user_id=USER_ID,
+            session_id=session_id,
+            state=state,
+        )
+
+        max_steps = state.get(str(MobileContextKey.MAX_STEPS), 50)
+        max_activities = state.get(str(MobileContextKey.MAX_ACTIVITIES), 3)
+        max_depth = state.get(str(MobileContextKey.MAX_DEPTH), 5)
+        instructions = str(state.get(str(MobileContextKey.INSTRUCTIONS)) or "")
+        instruction_arg = repr(instructions)
+        content = genai_types.Content(
+            role="user",
+            parts=[
+                genai_types.Part(
+                    text=(
+                        "Run the mobile accessibility test now. "
+                        f"Call run_mobile_test with max_steps={max_steps}, instructions={instruction_arg}, "
+                        f"max_activities={max_activities}, max_depth={max_depth}."
                     )
-                ],
-            )
-            events: list[Any] = []
-            assert self.runner is not None
-            async with Aclosing(
-                self.runner.run_async(user_id=USER_ID, session_id=session_id, new_message=content)
-            ) as event_stream:
-                async for event in event_stream:
-                    events.append(event)
+                )
+            ],
+        )
+        events: list[Any] = []
+        assert self.runner is not None
+        async with Aclosing(
+            self.runner.run_async(user_id=USER_ID, session_id=session_id, new_message=content)
+        ) as event_stream:
+            async for event in event_stream:
+                events.append(event)
 
-            state = await self._load_state(session_id)
-            return self._build_result(session_id, events, state)
+        state = await self._load_state(session_id)
+        return self._build_result(session_id, events, state)
 
     def _ensure_runner(self) -> None:
         if self.runner is None:
@@ -471,9 +477,9 @@ async def run_full_mobile_test(
     app_package: str,
     app_activity: str,
     capability_id: str | None = None,
-    max_steps: int = 50,
-    max_activities: int = 3,
-    max_depth: int = 5,
+    max_steps: int = 500,
+    max_activities: int = 20,
+    max_depth: int = 10,
     instructions: str | None = None,
 ) -> mcp_types.CallToolResult:
     """Run the mobile accessibility flow using explicit app package/activity arguments.
@@ -525,8 +531,6 @@ async def run_full_mobile_test(
         return _build_run_full_test_result(bridge_result)
     except Exception as exc:
         return _error_result(str(exc), {"capability_id": capability_id})
-    finally:
-        await MOBILE_SESSION.disconnect()
 
 
 @mcp.tool(structured_output=False)

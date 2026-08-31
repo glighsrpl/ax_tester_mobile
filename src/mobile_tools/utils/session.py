@@ -24,6 +24,7 @@ MOBILE_FULL_RESET = False
 MOBILE_ADB_EXEC_TIMEOUT = 120000
 MOBILE_UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT = 120000
 MOBILE_UIAUTOMATOR2_SERVER_LAUNCH_TIMEOUT = 120000
+MOBILE_NEW_COMMAND_TIMEOUT_SECONDS = 300
 MOBILE_ACTION_DELAY_MS = 500
 ANDROID_KEYCODES = {
     "back": 4,
@@ -129,6 +130,7 @@ class MobileSession:
             options.set_capability(
                 "appium:uiautomator2ServerLaunchTimeout", MOBILE_UIAUTOMATOR2_SERVER_LAUNCH_TIMEOUT
             )
+            options.set_capability("appium:newCommandTimeout", MOBILE_NEW_COMMAND_TIMEOUT_SECONDS)
             options.set_capability("appium:skipServerInstallation", False)
             if app_package:
                 options.set_capability("appium:forceAppLaunch", True)
@@ -149,12 +151,18 @@ class MobileSession:
         await self._restart_configured_app()
 
     async def disconnect(self) -> None:
-        if self.driver is not None:
-            driver = self.driver
-            self.driver = None
-            await asyncio.to_thread(driver.quit)
+        driver = self.driver
+        self.driver = None
         self.app_package = None
         self.app_activity = None
+        if driver is not None:
+            try:
+                await asyncio.to_thread(driver.quit)
+            except Exception:
+                logger.debug("Appium session was already closed", exc_info=True)
+
+    async def terminate_app(self, package_name: str) -> None:
+        await asyncio.to_thread(self._driver.terminate_app, package_name)
 
     async def get_window_size(self) -> dict[str, int]:
         return await asyncio.to_thread(self._driver.get_window_size)

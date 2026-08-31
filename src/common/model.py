@@ -12,8 +12,15 @@ ll_logger = logging.getLogger("LiteLLM")
 ll_logger.setLevel(logging.WARNING)
 ll_logger.propagate = False
 
-MODEL_NAME = "openai/gpt-5.4"
-MODEL = LiteLlm(model=MODEL_NAME, temperature=0.7)
+MODEL_NAME = "openai/gpt-5.6-terra"
+MODEL = LiteLlm(
+    model=MODEL_NAME,
+    temperature=0.7,
+    reasoning_effort="medium",
+)
 
 DUMMY_MODEL_NAME = "openai/gpt-4o"
-DUMMY_MODEL = LiteLlm(model=DUMMY_MODEL_NAME, temperature=0.7)
+DUMMY_MODEL = LiteLlm(
+    model=DUMMY_MODEL_NAME, 
+    temperature=0.7
+)
