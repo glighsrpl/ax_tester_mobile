@@ -12,6 +12,7 @@ SourceType = Literal[
     "llm/link_purpose_analyzer",
     "llm/on_focus_analyzer",
     "llm/no_keyboard_trap",
+    "mobile-static",
 ]
 ConfidenceLevel = Literal["high", "medium", "low"]
 WcagRule = Literal[

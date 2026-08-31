@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -22,6 +23,17 @@ MOBILE_FULL_RESET = False
 MOBILE_ADB_EXEC_TIMEOUT = 120000
 MOBILE_UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT = 120000
 MOBILE_UIAUTOMATOR2_SERVER_LAUNCH_TIMEOUT = 120000
+MOBILE_ACTION_DELAY_MS = 500
+ANDROID_KEYCODES = {
+    "back": 4,
+    "tab": 61,
+    "enter": 66,
+    "dpad_up": 19,
+    "dpad_down": 20,
+    "dpad_left": 21,
+    "dpad_right": 22,
+    "dpad_center": 23,
+}
 
 
 def _project_root() -> Path:
@@ -29,8 +41,8 @@ def _project_root() -> Path:
 
 
 def _appium_env() -> dict[str, str]:
-    sdk_root = os.getenv(ANDROID_HOME_ENV) or os.getenv(ANDROID_SDK_ROOT_ENV) or str(
-        _project_root() / "android-sdk"
+    sdk_root = (
+        os.getenv(ANDROID_HOME_ENV) or os.getenv(ANDROID_SDK_ROOT_ENV) or str(_project_root() / "android-sdk")
     )
     env = os.environ.copy()
     env[ANDROID_HOME_ENV] = sdk_root
@@ -65,7 +77,9 @@ class MobileSession:
         app_package: str | None = None,
         app_activity: str | None = None,
     ) -> None:
-        serial = capability_id.removeprefix("local-android:") if capability_id.startswith("local-android:") else ""
+        serial = (
+            capability_id.removeprefix("local-android:") if capability_id.startswith("local-android:") else ""
+        )
         serial = serial or os.getenv(MOBILE_DEVICE_SERIAL_ENV, "").strip()
 
         def _connect():
@@ -78,8 +92,12 @@ class MobileSession:
             options.set_capability("appium:noReset", MOBILE_NO_RESET)
             options.set_capability("appium:fullReset", MOBILE_FULL_RESET)
             options.set_capability("appium:adbExecTimeout", MOBILE_ADB_EXEC_TIMEOUT)
-            options.set_capability("appium:uiautomator2ServerInstallTimeout", MOBILE_UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT)
-            options.set_capability("appium:uiautomator2ServerLaunchTimeout", MOBILE_UIAUTOMATOR2_SERVER_LAUNCH_TIMEOUT)
+            options.set_capability(
+                "appium:uiautomator2ServerInstallTimeout", MOBILE_UIAUTOMATOR2_SERVER_INSTALL_TIMEOUT
+            )
+            options.set_capability(
+                "appium:uiautomator2ServerLaunchTimeout", MOBILE_UIAUTOMATOR2_SERVER_LAUNCH_TIMEOUT
+            )
             options.set_capability("appium:skipServerInstallation", False)
             for key, value in {
                 "appium:udid": serial,
@@ -102,6 +120,83 @@ class MobileSession:
             self.driver = None
             await asyncio.to_thread(driver.quit)
 
+    async def get_window_size(self) -> dict[str, int]:
+        return await asyncio.to_thread(self._driver.get_window_size)
+
+    async def tap(self, x: int, y: int) -> None:
+        await asyncio.to_thread(self._driver.tap, [(int(x), int(y))])
+        await self._wait_after_action()
+
+    async def tap_bounds(self, bounds: str) -> None:
+        left, top, right, bottom = map(int, re.findall(r"\d+", bounds)[:4])
+        await self.tap((left + right) // 2, (top + bottom) // 2)
+
+    async def tap_center(self) -> None:
+        size = await self.get_window_size()
+        await self.tap(size["width"] // 2, size["height"] // 2)
+
+    async def swipe(self, start_x: int, start_y: int, end_x: int, end_y: int, duration_ms: int = 500) -> None:
+        await asyncio.to_thread(
+            self._driver.swipe,
+            int(start_x),
+            int(start_y),
+            int(end_x),
+            int(end_y),
+            int(duration_ms),
+        )
+        await self._wait_after_action()
+
+    async def scroll_down(self) -> None:
+        size = await self.get_window_size()
+        x = size["width"] // 2
+        await self.swipe(x, int(size["height"] * 0.8), x, int(size["height"] * 0.25))
+
+    async def scroll_up(self) -> None:
+        size = await self.get_window_size()
+        x = size["width"] // 2
+        await self.swipe(x, int(size["height"] * 0.25), x, int(size["height"] * 0.8))
+
+    async def swipe_left(self) -> None:
+        size = await self.get_window_size()
+        y = size["height"] // 2
+        await self.swipe(int(size["width"] * 0.8), y, int(size["width"] * 0.2), y)
+
+    async def swipe_right(self) -> None:
+        size = await self.get_window_size()
+        y = size["height"] // 2
+        await self.swipe(int(size["width"] * 0.2), y, int(size["width"] * 0.8), y)
+
+    async def press_keycode(self, keycode: int) -> None:
+        await asyncio.to_thread(self._driver.press_keycode, int(keycode))
+        await self._wait_after_action()
+
+    async def press_key(self, key: str) -> None:
+        await self.press_keycode(ANDROID_KEYCODES[key.lower()])
+
+    async def back(self) -> None:
+        await self.press_key("back")
+
+    async def press_tab(self) -> None:
+        await self.press_key("tab")
+
+    async def press_enter(self) -> None:
+        await self.press_key("enter")
+
+    async def press_dpad_up(self) -> None:
+        await self.press_key("dpad_up")
+
+    async def press_dpad_down(self) -> None:
+        await self.press_key("dpad_down")
+
+    async def press_dpad_left(self) -> None:
+        await self.press_key("dpad_left")
+
+    async def press_dpad_right(self) -> None:
+        await self.press_key("dpad_right")
+
+    async def press_dpad_center(self) -> None:
+        await self.press_key("dpad_center")
+
     async def _ensure_server(self) -> None:
         if self._server_ready() or not APPIUM_AUTOSTART:
             return
@@ -120,6 +215,8 @@ class MobileSession:
         for _ in range(30):
             if self._server_ready():
                 return
+            if self.server_process.poll() is not None:
+                raise RuntimeError(f"Appium server failed to start. Check {_log_path()}.")
             await asyncio.to_thread(time.sleep, 1)
 
     def _server_ready(self) -> bool:
@@ -128,6 +225,9 @@ class MobileSession:
                 return response.status == 200
         except Exception:
             return False
+
+    async def _wait_after_action(self) -> None:
+        await asyncio.sleep(MOBILE_ACTION_DELAY_MS / 1000)
 
     async def get_accessibility_tree(self) -> str:
         return await asyncio.to_thread(lambda: self._driver.page_source)

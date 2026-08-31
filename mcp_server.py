@@ -29,6 +29,8 @@ from mcp.server.transport_security import TransportSecuritySettings
 
 from agent import root_agent
 from common import ContextKey
+from tools import MobileRuntimeNavigatorTool
+from tools.mobile_saver_tool import save_mobile_report
 from utils.browser_session import BROWSER_SESSION
 from utils.mobile_capabilities import discover_mobile_capabilities
 from utils.mobile_session import MOBILE_SESSION
@@ -368,30 +370,55 @@ async def get_test_capabilities() -> dict[str, Any]:
 
 
 @mcp.tool(structured_output=False)
-async def run_mobile_connection_test(
-    capability_id: str,
-    app_package: str | None = None,
-    app_activity: str | None = None,
+async def run_full_mobile_test(  # FIXME
+    app_package: str,
+    app_activity: str,
+    capability_id: str | None = None,
+    max_steps: int = 20,
 ) -> mcp_types.CallToolResult:
-    """Connect to a local mobile capability and return a raw tree plus screenshot."""
+    """Run the mobile accessibility flow using explicit app package/activity arguments."""
+    app_package = app_package.strip()
+    app_activity = app_activity.strip().lstrip("/")
+    capability_id = capability_id.strip() if capability_id else None
+    if not app_package or not app_activity:
+        return _error_result("app_package and app_activity are required.", {})
+
+    capabilities = discover_mobile_capabilities()
+    if capability_id is None:
+        if len(capabilities) != 1:
+            return _error_result(
+                "Expected exactly one local mobile capability. Pass capability_id explicitly.",
+                {"capabilities": capabilities},
+            )
+        capability_id = str(capabilities[0]["id"])
+
     try:
         await MOBILE_SESSION.connect(
             capability_id,
             app_package=app_package,
             app_activity=app_activity,
         )
-        tree = await MOBILE_SESSION.get_accessibility_tree()
-        screenshot = await MOBILE_SESSION.take_screenshot()
-        metadata = await MOBILE_SESSION.get_device_metadata()
-        return mcp_types.CallToolResult(
-            content=[_text_content_mcp(f"Mobile connection test completed for {capability_id}.")],
-            structuredContent={
+
+        result = await MobileRuntimeNavigatorTool({"max_steps": max_steps}).execute()
+        if not result.is_success():
+            return _error_result(
+                result.error or "Mobile accessibility test failed.", {"capability_id": capability_id}
+            )
+
+        report_artifact = save_mobile_report(
+            app_package=app_package,
+            app_activity=app_activity,
+            capability_id=capability_id,
+            navigator_data=result.data,
+        )
+        return _build_run_full_test_result(
+            {
                 "status": "ok",
-                "capability_id": capability_id,
-                "metadata": metadata,
-                "accessibility_tree": tree,
-                "screenshot_base64": screenshot,
-            },
+                "session_id": None,
+                "current_url": f"mobile://{app_package}/{app_activity}",
+                "final_response": "Mobile accessibility test completed.",
+                "report_artifact": report_artifact,
+            }
         )
     except Exception as exc:
         return _error_result(str(exc), {"capability_id": capability_id})
