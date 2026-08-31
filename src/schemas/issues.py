@@ -12,10 +12,6 @@ SourceType = Literal[
     "llm/link_purpose_analyzer",
     "llm/on_focus_analyzer",
     "llm/no_keyboard_trap",
-    "mobile-static",
-    "mobile-deterministic",  # FIXME: change name
-    "mobile-llm",
-    "mobile-both",
 ]
 ConfidenceLevel = Literal["high", "medium", "low"]
 WcagRule = Literal[

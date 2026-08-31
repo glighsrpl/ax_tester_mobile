@@ -26,16 +26,24 @@ class ContextKey(StrEnum):
     # saved artifacts
     REPORT_ARTIFACT = "report_artifact"
 
-    # mobile
-    MOBILE_APP_PACKAGE = "mobile_app_package"
-    MOBILE_APP_ACTIVITY = "mobile_app_activity"
-    MOBILE_CAPABILITY_ID = "mobile_capability_id"
-    MOBILE_MAX_STEPS = "mobile_max_steps"
-    MOBILE_MAX_ACTIVITIES = "mobile_max_activities"
-    MOBILE_MAX_DEPTH = "mobile_max_depth"
-    MOBILE_INSTRUCTIONS = "mobile_instructions"
-    MOBILE_NAVIGATOR_DATA = "mobile_navigator_data"
-    MOBILE_STATIC_RESULTS = "mobile_static_results"
+
+class MobileContextKey(StrEnum):
+    # inputs
+    APP_PACKAGE = "mobile_app_package"
+    APP_ACTIVITY = "mobile_app_activity"
+    CAPABILITY_ID = "mobile_capability_id"
+    MAX_STEPS = "mobile_max_steps"
+    MAX_ACTIVITIES = "mobile_max_activities"
+    MAX_DEPTH = "mobile_max_depth"
+    INSTRUCTIONS = "mobile_instructions"
+
+    # outcomes
+    NAVIGATOR_DATA = "mobile_navigator_data"
+    STATIC_RESULTS = "mobile_static_results"
+    STATIC_DEBUG_DATA = "mobile_static_debug_data"
+
+    # saved artifacts
+    REPORT_ARTIFACT = "mobile_report_artifact"
 
 
 FINAL_REPORT_KEYS: tuple[ContextKey, ...] = (

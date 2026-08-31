@@ -28,7 +28,7 @@ from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from agent import root_agent
-from common import ContextKey
+from common import ContextKey, MobileContextKey
 from mobile_agent import mobile_root_agent
 from mobile_tools.saver_tool import run_save_mobile
 from mobile_tools.utils.capabilities import discover_mobile_capabilities
@@ -201,10 +201,10 @@ class MobileAgentBridge:
                 state=state,
             )
 
-            max_steps = state.get(str(ContextKey.MOBILE_MAX_STEPS), 50)
-            max_activities = state.get(str(ContextKey.MOBILE_MAX_ACTIVITIES), 3)
-            max_depth = state.get(str(ContextKey.MOBILE_MAX_DEPTH), 5)
-            instructions = str(state.get(str(ContextKey.MOBILE_INSTRUCTIONS)) or "")
+            max_steps = state.get(str(MobileContextKey.MAX_STEPS), 50)
+            max_activities = state.get(str(MobileContextKey.MAX_ACTIVITIES), 3)
+            max_depth = state.get(str(MobileContextKey.MAX_DEPTH), 5)
+            instructions = str(state.get(str(MobileContextKey.INSTRUCTIONS)) or "")
             instruction_arg = repr(instructions)
             content = genai_types.Content(
                 role="user",
@@ -511,13 +511,13 @@ async def run_full_mobile_test(
     try:
         bridge_result = await mobile_bridge.run_turn(
             {
-                str(ContextKey.MOBILE_APP_PACKAGE): app_package,
-                str(ContextKey.MOBILE_APP_ACTIVITY): app_activity,
-                str(ContextKey.MOBILE_CAPABILITY_ID): capability_id,
-                str(ContextKey.MOBILE_MAX_STEPS): max_steps,
-                str(ContextKey.MOBILE_MAX_ACTIVITIES): max_activities,
-                str(ContextKey.MOBILE_MAX_DEPTH): max_depth,
-                str(ContextKey.MOBILE_INSTRUCTIONS): (instructions or "").strip(),
+                str(MobileContextKey.APP_PACKAGE): app_package,
+                str(MobileContextKey.APP_ACTIVITY): app_activity,
+                str(MobileContextKey.CAPABILITY_ID): capability_id,
+                str(MobileContextKey.MAX_STEPS): max_steps,
+                str(MobileContextKey.MAX_ACTIVITIES): max_activities,
+                str(MobileContextKey.MAX_DEPTH): max_depth,
+                str(MobileContextKey.INSTRUCTIONS): (instructions or "").strip(),
             }
         )
         bridge_result["report_artifact"] = run_save_mobile(bridge_result.get("state", {}))
@@ -581,4 +581,4 @@ if __name__ == "__main__":
     mcp.settings.host = args.host
     mcp.settings.port = args.port
 
-    mcp.run()  # transport="streamable-http")
+    mcp.run(transport="streamable-http")

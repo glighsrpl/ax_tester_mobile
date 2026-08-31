@@ -2,17 +2,17 @@ from typing import Any
 
 from google.adk.tools.tool_context import ToolContext
 
-from common import ContextKey
+from common import MobileContextKey
 from mobile_tools.guided_navigator import MobileGuidedNavigatorTool
 from mobile_tools.screen_scanner import MobileScreenScannerTool
 from tools.base import ToolResult
 
 
-def _state_str(tool_context: ToolContext, key: ContextKey, default: str = "") -> str:
+def _state_str(tool_context: ToolContext, key: MobileContextKey, default: str = "") -> str:
     return str(tool_context.state.get(key) or tool_context.state.get(str(key)) or default).strip()
 
 
-def _state_int(tool_context: ToolContext, key: ContextKey, default: int) -> int:
+def _state_int(tool_context: ToolContext, key: MobileContextKey, default: int) -> int:
     value = tool_context.state.get(key)
     if value is None:
         value = tool_context.state.get(str(key))
@@ -56,12 +56,12 @@ async def run_mobile_screen_scan(tool_context: ToolContext) -> dict[str, Any]:
     Returns:
         dict[str, Any]: A dictionary containing the scan results, including the status and the number of activities visited during the scan.
     """
-    app_package = _state_str(tool_context, ContextKey.MOBILE_APP_PACKAGE)
-    max_steps = _state_int(tool_context, ContextKey.MOBILE_MAX_STEPS, 10)
-    max_activities = _state_int(tool_context, ContextKey.MOBILE_MAX_ACTIVITIES, 10)
-    max_depth = _state_int(tool_context, ContextKey.MOBILE_MAX_DEPTH, 5)
+    app_package = _state_str(tool_context, MobileContextKey.APP_PACKAGE)
+    max_steps = _state_int(tool_context, MobileContextKey.MAX_STEPS, 10)
+    max_activities = _state_int(tool_context, MobileContextKey.MAX_ACTIVITIES, 10)
+    max_depth = _state_int(tool_context, MobileContextKey.MAX_DEPTH, 5)
     data = await _scan(app_package, max_steps, max_activities, max_depth)
-    tool_context.state[ContextKey.MOBILE_NAVIGATOR_DATA] = data
+    tool_context.state[MobileContextKey.NAVIGATOR_DATA] = data
     return {"status": "success", "activities": _activity_count(data)}
 
 
@@ -78,11 +78,11 @@ async def run_mobile_guided_navigation(
             max_steps (int): The maximum number of steps to perform during the navigation.
             instructions (str): The navigation instructions to guide the navigation process.
     """
-    app_package = _state_str(tool_context, ContextKey.MOBILE_APP_PACKAGE)
-    max_steps = _state_int(tool_context, ContextKey.MOBILE_MAX_STEPS, 10)
-    max_activities = _state_int(tool_context, ContextKey.MOBILE_MAX_ACTIVITIES, 10)
-    max_depth = _state_int(tool_context, ContextKey.MOBILE_MAX_DEPTH, 5)
-    text = instructions.strip() or _state_str(tool_context, ContextKey.MOBILE_INSTRUCTIONS)
+    app_package = _state_str(tool_context, MobileContextKey.APP_PACKAGE)
+    max_steps = _state_int(tool_context, MobileContextKey.MAX_STEPS, 10)
+    max_activities = _state_int(tool_context, MobileContextKey.MAX_ACTIVITIES, 10)
+    max_depth = _state_int(tool_context, MobileContextKey.MAX_DEPTH, 5)
+    text = instructions.strip() or _state_str(tool_context, MobileContextKey.INSTRUCTIONS)
     raw_result: ToolResult = await MobileGuidedNavigatorTool(
         {
             "instructions": text,
@@ -95,5 +95,5 @@ async def run_mobile_guided_navigation(
     data = await _scan(app_package, max_steps, max_activities, max_depth)
     guided_path = raw_result.data.get("path", []) if isinstance(raw_result.data, dict) else []
     data["path"] = [*guided_path, *data.get("path", [])]
-    tool_context.state[ContextKey.MOBILE_NAVIGATOR_DATA] = data
+    tool_context.state[MobileContextKey.NAVIGATOR_DATA] = data
     return {"status": "success", "activities": _activity_count(data)}

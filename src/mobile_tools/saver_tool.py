@@ -3,9 +3,10 @@
 import json
 from collections.abc import Mapping, MutableMapping
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
-from common import ContextKey
+from common import MobileContextKey
 from schemas import ScoreInfo
 from tools.saver_tool import _get_run_dir, _merge_score, _safe_int, _write_run_artifacts, generate_run_timestamp
 
@@ -29,34 +30,68 @@ def save_mobile_report(
         json.dump(reports, file, indent=2, ensure_ascii=False)
 
     report_artifact = _write_run_artifacts(report_id, report_dir, reports)
+    debug_dir = _write_static_debug_artifacts(
+        report_dir,
+        static_debug_data=_state_debug_payload(static_results),
+    )
     return {
         "status": "saved",
         "report_id": report_id,
         "run_dir": str(report_dir),
         "results_file": str(results_file),
+        "debug_dir": str(debug_dir) if debug_dir else None,
         "report": reports,
         **report_artifact,
     }
 
 
 def run_save_mobile(state: MutableMapping[Any, Any]) -> dict[str, Any]:
-    navigator_data = _state_dict(state, ContextKey.MOBILE_NAVIGATOR_DATA)
+    navigator_data = _state_dict(state, MobileContextKey.NAVIGATOR_DATA)
     if not navigator_data:
         raise ValueError("Missing mobile navigator data.")
-    static_results = _state_value(state, ContextKey.MOBILE_STATIC_RESULTS)
+    static_results = _state_value(state, MobileContextKey.STATIC_RESULTS)
     if isinstance(static_results, Mapping) and isinstance(static_results.get("issue_list"), list):
         static_results = [{"result": static_results}]
+    static_debug_data = _state_value(state, MobileContextKey.STATIC_DEBUG_DATA)
 
     report_artifact = save_mobile_report(
-        app_package=_state_str(state, ContextKey.MOBILE_APP_PACKAGE),
-        app_activity=_state_str(state, ContextKey.MOBILE_APP_ACTIVITY),
-        capability_id=_state_str(state, ContextKey.MOBILE_CAPABILITY_ID),
+        app_package=_state_str(state, MobileContextKey.APP_PACKAGE),
+        app_activity=_state_str(state, MobileContextKey.APP_ACTIVITY),
+        capability_id=_state_str(state, MobileContextKey.CAPABILITY_ID),
         navigator_data=navigator_data,
-        static_results=static_results if isinstance(static_results, list) else [],
+        static_results=_with_static_debug(
+            static_results if isinstance(static_results, list) else [],
+            static_debug_data,
+        ),
     )
-    state[ContextKey.REPORT_ARTIFACT] = report_artifact
-    state[str(ContextKey.REPORT_ARTIFACT)] = report_artifact
+    state[MobileContextKey.REPORT_ARTIFACT] = report_artifact
+    state[str(MobileContextKey.REPORT_ARTIFACT)] = report_artifact
     return report_artifact
+
+
+def _with_static_debug(static_results: list[Any], static_debug_data: Any) -> list[Any]:
+    if not isinstance(static_debug_data, list):
+        return static_results
+    return [*static_results, {"debug": static_debug_data}]
+
+
+def _state_debug_payload(static_results: list[Any]) -> list[dict[str, Any]]:
+    for item in static_results:
+        if isinstance(item, Mapping) and isinstance(item.get("debug"), list):
+            return [debug for debug in item["debug"] if isinstance(debug, dict)]
+    return []
+
+
+def _write_static_debug_artifacts(report_dir: Path, static_debug_data: list[dict[str, Any]]) -> Path | None:
+    if not static_debug_data:
+        return None
+    debug_dir = report_dir / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    for index, debug_payload in enumerate(static_debug_data, start=1):
+        debug_file = debug_dir / f"static_input_{index:04d}.json"
+        with open(debug_file, "w", encoding="utf-8") as file:
+            json.dump(debug_payload, file, indent=2, ensure_ascii=False, default=str)
+    return debug_dir
 
 
 def _build_screen_reports(
@@ -158,15 +193,15 @@ def _label(value: str) -> str:
     return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"
 
 
-def _state_value(state: Mapping[Any, Any], key: ContextKey) -> Any:
+def _state_value(state: Mapping[Any, Any], key: object) -> Any:
     return state.get(key) or state.get(str(key))
 
 
-def _state_str(state: Mapping[Any, Any], key: ContextKey) -> str:
+def _state_str(state: Mapping[Any, Any], key: object) -> str:
     return str(_state_value(state, key) or "").strip()
 
 
-def _state_dict(state: Mapping[Any, Any], key: ContextKey) -> dict[str, Any]:
+def _state_dict(state: Mapping[Any, Any], key: object) -> dict[str, Any]:
     value = _state_value(state, key)
     return value if isinstance(value, dict) else {}
 
