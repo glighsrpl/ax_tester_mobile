@@ -1,19 +1,10 @@
 import json
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Protocol
 
 from mobile_agents.static_agent.deterministic_consumers import run_deterministic_analysis
 from mobile_tools.screen_scanner import MobileScanSnapshot
 from schemas import Issue, Report, ScoreInfo
-
-
-class SnapshotReportAnalysis(Protocol):
-    activity: str
-    snapshot_id: str
-    deterministic_report: Report
-    contrast_report: Report
-    llm_report: Report
 
 
 def deterministic_report(snapshot: MobileScanSnapshot) -> Report:
@@ -53,30 +44,6 @@ def merge_static_reports(
         score_total=_sum_scores(report.score_total for report in reports),
         metadata=[{"key": "snapshots", "value": total_snapshots}],
     )
-
-
-def issues_by_activity(
-    analyses: Iterable[SnapshotReportAnalysis],
-    navigator_data: dict[str, object],
-) -> dict[str, list[Issue]]:
-    activities = navigator_data.get("visited_activities")
-    activity_issues: dict[str, list[Issue]] = (
-        {str(activity).strip(): [] for activity in activities if str(activity).strip()}
-        if isinstance(activities, list)
-        else {}
-    )
-    screenshots = navigator_data.get("snapshot_screenshots")
-    screenshot_paths = screenshots if isinstance(screenshots, dict) else {}
-    for analysis in analyses:
-        activity = str(analysis.activity).strip() or "unknown"
-        screenshot_path = screenshot_paths.get(analysis.snapshot_id)
-        image_path = screenshot_path if isinstance(screenshot_path, str) and screenshot_path else None
-        activity_issues.setdefault(activity, []).extend(
-            issue.model_copy(update={"image_url_or_path": image_path})
-            for report in (analysis.deterministic_report, analysis.contrast_report, analysis.llm_report)
-            for issue in report.issue_list
-        )
-    return {activity: dedupe_issues(issues) for activity, issues in activity_issues.items()}
 
 
 def flatten_issues_by_activity(issues_by_activity: dict[str, list[Issue]]) -> list[Issue]:

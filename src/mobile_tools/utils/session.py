@@ -13,7 +13,6 @@ from urllib.request import urlopen
 logger = logging.getLogger(__name__)
 
 APPIUM_SERVER_URL_ENV = "APPIUM_SERVER_URL"
-ANDROID_HOME_ENV = "ANDROID_HOME"
 ANDROID_SDK_ROOT_ENV = "ANDROID_SDK_ROOT"
 APPIUM_HOME_ENV = "APPIUM_HOME"
 DEFAULT_APPIUM_SERVER_URL = "http://127.0.0.1:4723"
@@ -69,10 +68,9 @@ def get_mobile_run_logs_dir() -> Path:
 
 def _appium_env() -> dict[str, str]:
     sdk_root = (
-        os.getenv(ANDROID_HOME_ENV) or os.getenv(ANDROID_SDK_ROOT_ENV) or str(_project_root() / "android-sdk")
+        os.getenv(ANDROID_SDK_ROOT_ENV) or str(_project_root() / "android-sdk")
     )
     env = os.environ.copy()
-    env[ANDROID_HOME_ENV] = sdk_root
     env[ANDROID_SDK_ROOT_ENV] = sdk_root
     env[APPIUM_HOME_ENV] = str(_project_root())
     env["PATH"] = os.pathsep.join([str(Path(sdk_root) / "platform-tools"), env.get("PATH", "")])

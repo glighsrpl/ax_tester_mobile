@@ -2,14 +2,12 @@ import os
 import subprocess
 from pathlib import Path
 
-ANDROID_HOME_ENV = "ANDROID_HOME"
 ANDROID_SDK_ROOT_ENV = "ANDROID_SDK_ROOT"
 
 
 def _adb_bin() -> str:
     sdk_root = (
-        os.getenv(ANDROID_HOME_ENV)
-        or os.getenv(ANDROID_SDK_ROOT_ENV)
+        os.getenv(ANDROID_SDK_ROOT_ENV)
         or Path(__file__).resolve().parents[3] / "android-sdk"
     )
     adb = Path(sdk_root) / "platform-tools" / "adb"

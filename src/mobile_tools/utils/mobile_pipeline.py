@@ -10,15 +10,13 @@ from common import MobileContextKey
 from mobile_tools.guided_navigator import MobileGuidedNavigatorTool
 from mobile_tools.screen_scanner import MobileScanSnapshot
 from mobile_tools.utils.queue_utils import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
-from mobile_tools.utils.report_utils import (
-    deterministic_report,
-    merge_static_reports,
-)
+from mobile_tools.utils.report_utils import deterministic_report
 from mobile_tools.utils.snapshot_utils import build_static_debug_payload, build_static_snapshot_payload
 from mobile_tools.utils.static_analysis_utils import (
     aggregate_source_reports,
     empty_llm_reports,
-    merge_reports_by_activity,
+    group_merged_issues_by_activity,
+    run_mobile_merge,
     run_static_snapshot,
 )
 from schemas import Issue, Report
@@ -125,20 +123,16 @@ async def aggregate_static_analyses(
     analyses: list[SnapshotAnalysis],
     navigator_data: Mapping[str, object],
 ) -> StaticAnalysisResult:
-    """Merge each activity's source reports and preserve their unique findings."""
+    """Send all source findings to the merge agent and retain activity buckets."""
     deterministic, contrast, llm = aggregate_source_reports(analyses, navigator_data.get("snapshot_screenshots"))
-    merged_reports_by_activity = await merge_reports_by_activity(
+    report = await run_mobile_merge(deterministic, contrast, llm)
+    activity_issues = group_merged_issues_by_activity(
+        report,
         analyses,
         navigator_data.get("snapshot_screenshots"),
     )
-    activity_issues = {activity: report.issue_list for activity, report in merged_reports_by_activity.items()}
     return StaticAnalysisResult(
-        report=merge_static_reports(
-            list(merged_reports_by_activity.values()),
-            len(analyses),
-            activity_issues,
-            tool_name="mobile",
-        ),
+        report=report,
         deterministic_report=deterministic,
         contrast_report=contrast,
         llm_report=llm,
