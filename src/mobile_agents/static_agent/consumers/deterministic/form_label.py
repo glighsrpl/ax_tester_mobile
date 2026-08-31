@@ -24,6 +24,9 @@ SPECIFIC_INPUT_HINTS = (
     "zip",
 )
 
+# TODO [Static Agent LLM]: verify label adequately describes expected input (3.3.2)
+# TODO [Static Agent LLM]: detect visual layout relationships not expressed programmatically (1.3.1)
+
 
 class FormLabelConsumer(BaseConsumer):
     name = "mobile-form-label-consumer"

@@ -10,6 +10,9 @@ from utils.wcag_helper import get_rule_name_from_axe_tags
 WCAG_RULE = get_rule_name_from_axe_tags(["wcag242"])
 GENERIC_TITLES = {"mainactivity", "activity", "fragment", "screen", "home"}
 
+# TODO [Static Agent LLM]: verify title adequately describes screen content (2.4.2)
+# FIXME: not used, for now
+
 class PageTitleConsumer(MobileBaseConsumer):
     name = "mobile-page-title-consumer"
     report_key = "mobile_page_title_report"
