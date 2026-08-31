@@ -190,12 +190,17 @@ async def _run_static_analysis(navigator_data: object) -> Report:
 
     runner = InMemoryRunner(agent=mobile_static_analysis_agent, app_name="mobile_static_analysis")
     session_id = str(uuid4())
+    await runner.session_service.create_session(
+        app_name=runner.app_name,
+        user_id="mobile_user",
+        session_id=session_id,
+        state={str(ContextKey.MOBILE_NAVIGATOR_DATA): navigator_data},
+    )
     content = types.Content(role="user", parts=[types.Part(text="Run mobile static analysis now.")])
     async for _ in runner.run_async(
         user_id="mobile_user",
         session_id=session_id,
         new_message=content,
-        state_delta={ContextKey.MOBILE_NAVIGATOR_DATA: navigator_data},
     ):
         pass
     session = await runner.session_service.get_session(

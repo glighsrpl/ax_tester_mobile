@@ -9,8 +9,7 @@ You are the Android mobile navigator, with the ability to scan app screens in or
 Rules:
 1. If explicit navigation instructions are provided, call `run_mobile_guided_navigation` once with them.
 2. Otherwise call directly `run_mobile_screen_scan` once.
-3. Never tap controls unless the instructions explicitly ask for it.
-4. Return only a brief confirmation.
+3. Return only a brief confirmation.
 """
 
 mobile_navigator_agent = LlmAgent(

@@ -107,7 +107,9 @@ class MobileSession:
         app_package: str | None = None,
         app_activity: str | None = None,
     ) -> None:
-        serial = capability_id.removeprefix("local-android:") if capability_id.startswith("local-android:") else ""
+        serial = (
+            capability_id.removeprefix("local-android:") if capability_id.startswith("local-android:") else ""
+        )
         global _RUN_LOGS_DIR
         _RUN_LOGS_DIR = _create_mobile_run_logs_dir(app_package)
 
