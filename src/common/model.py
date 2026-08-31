@@ -16,7 +16,7 @@ MODEL_NAME = "openai/gpt-5.6-terra"
 MODEL = LiteLlm(
     model=MODEL_NAME,
     temperature=0.7,
-    reasoning_effort="low",
+    reasoning_effort="medium",
 )
 
 DUMMY_MODEL_NAME = "openai/gpt-4o"
