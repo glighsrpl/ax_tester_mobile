@@ -2,11 +2,10 @@
 
 import logging
 from uuid import uuid4
-from xml.etree import ElementTree
 
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents.sequential_agent import SequentialAgent
-from google.adk.runners import Runner
+from google.adk.runners import InMemoryRunner, Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.adk.tools.tool_context import ToolContext
 from google.adk.utils.context_utils import Aclosing
@@ -14,12 +13,9 @@ from google.genai import types
 
 from common import MODEL, ContextKey
 from mobile_agents.navigation_agent import mobile_navigator_agent
-from mobile_agents.static_agent import MobileStaticAgent
-from mobile_tools.base import MobileElementInfo, MobileKeyboardResult
-from mobile_tools.consumers import build_default_mobile_consumers
-from mobile_tools.screen_scanner import MobileScanSnapshot
-from mobile_tools.tree import parse_mobile_tree
+from mobile_agents.static_agent import mobile_static_analysis_agent
 from mobile_tools.utils.session import MOBILE_SESSION
+from schemas import Report
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +57,7 @@ async def run_mobile_test(
     tool_context.state[ContextKey.MOBILE_MAX_DEPTH] = resolved_max_depth
     tool_context.state[ContextKey.MOBILE_INSTRUCTIONS] = resolved_instructions
 
+    # Connect to the mobile device and retrieve the current accessibility tree
     await MOBILE_SESSION.connect(
         capability_id,
         app_package=app_package,
@@ -148,7 +145,9 @@ async def run_mobile_test(
     if isinstance(navigator_data, dict):
         tool_context.state[ContextKey.MOBILE_NAVIGATOR_DATA] = navigator_data
 
-    static_results = _run_static_analysis(navigator_data)
+    # Run static accessibility analysis on the collected snapshots and store results
+    static_report = await _run_static_analysis(navigator_data)
+    static_results = static_report.model_dump(mode="json")
     tool_context.state[ContextKey.MOBILE_STATIC_RESULTS] = static_results
 
     return {
@@ -183,89 +182,36 @@ def _activity_count(data: dict[str, object]) -> int:
     return len(activities) if isinstance(activities, list) else 0
 
 
-def _run_static_analysis(navigator_data: object) -> list[dict]:
+async def _run_static_analysis(navigator_data: object) -> Report:
     raw_snapshots = navigator_data.get("snapshots") if isinstance(navigator_data, dict) else None
     if not isinstance(raw_snapshots, list) or not raw_snapshots:
         logger.warning("Mobile navigator returned no snapshots; skipping static analysis")
-        return []
+        return _empty_static_report()
 
-    snapshots = [
-        (index, snapshot) for index, item in enumerate(raw_snapshots) if (snapshot := _snapshot_from_data(item))
-    ]
-    if not snapshots:
-        logger.warning("Mobile navigator snapshots could not be deserialized; skipping static analysis")
-        return []
-
-    raw_keyboard = navigator_data.get("keyboard_results")
-    keyboard_results = raw_keyboard if isinstance(raw_keyboard, list) else []
-
-    # TODO: Replace MobileStaticAgent class with LlmAgent sub-runner when LLM-based consumers are added.
-    # The interface stays the same: receive snapshots → produce results.
-    # Change: instantiate as ADK agent, run via Runner, pass snapshots as message content.
-    static_agent = MobileStaticAgent(consumers=build_default_mobile_consumers())
-    for index, snapshot in snapshots:
-        keyboard_result = (
-            _keyboard_from_data(keyboard_results[index], snapshot) if index < len(keyboard_results) else None
-        )
-        static_agent.consume_screen(snapshot, keyboard_result)
-    return static_agent.finalize()
-
-
-def _snapshot_from_data(data: object) -> MobileScanSnapshot | None:
-    if isinstance(data, MobileScanSnapshot):
-        return data
-    if not isinstance(data, dict):
-        return None
-    tree_xml = str(data.get("tree_xml") or "")
-    raw_elements = data.get("elements")
-    try:
-        elements = (
-            _elements_from_data(raw_elements)
-            if isinstance(raw_elements, list)
-            else parse_mobile_tree(tree_xml, page_screenshot=str(data.get("screenshot") or ""))
-        )
-    except (TypeError, ValueError, ElementTree.ParseError):
-        return None
-    return MobileScanSnapshot(
-        activity=str(data.get("activity") or "unknown"),
-        tree_xml=tree_xml,
-        screenshot=str(data.get("screenshot") or ""),
-        elements=elements,
+    runner = InMemoryRunner(agent=mobile_static_analysis_agent, app_name="mobile_static_analysis")
+    session_id = str(uuid4())
+    content = types.Content(role="user", parts=[types.Part(text="Run mobile static analysis now.")])
+    async for _ in runner.run_async(
+        user_id="mobile_user",
+        session_id=session_id,
+        new_message=content,
+        state_delta={ContextKey.MOBILE_NAVIGATOR_DATA: navigator_data},
+    ):
+        pass
+    session = await runner.session_service.get_session(
+        app_name=runner.app_name,
+        user_id="mobile_user",
+        session_id=session_id,
     )
+    result = session.state.get(ContextKey.MOBILE_STATIC_RESULTS) if session else None
+    return Report.model_validate_json(result) if isinstance(result, str) else Report.model_validate(result)
 
 
-def _keyboard_from_data(
-    data: object,
-    snapshot: MobileScanSnapshot,
-) -> MobileKeyboardResult | None:
-    if isinstance(data, MobileKeyboardResult):
-        return data
-    if not isinstance(data, dict):
-        return None
-    lookup = {element.get_focus_key(): element for element in snapshot.elements}
-    traps = [item if isinstance(item, dict) else {"focus_key": str(item)} for item in data.get("traps") or []]
-    return MobileKeyboardResult(
-        reachable=_elements_from_data(data.get("reachable"), lookup),
-        unreachable=_elements_from_data(data.get("unreachable"), lookup),
-        focus_order=_elements_from_data(data.get("focus_order"), lookup),
-        traps=traps,
-        activity=str(data.get("activity") or snapshot.activity),
+def _empty_static_report() -> Report:
+    return Report(
+        tool_name="mobile-static",
+        total_issues=0,
+        page="mobile",
+        issue_list=[],
+        metadata=[{"key": "snapshots", "value": 0}],
     )
-
-
-def _elements_from_data(
-    data: object,
-    lookup: dict[str, MobileElementInfo] | None = None,
-) -> list[MobileElementInfo]:
-    if not isinstance(data, list):
-        return []
-    fields = MobileElementInfo.__dataclass_fields__
-    elements = []
-    for item in data:
-        if isinstance(item, MobileElementInfo):
-            elements.append(item)
-        elif isinstance(item, dict):
-            elements.append(MobileElementInfo(**{key: value for key, value in item.items() if key in fields}))
-        elif lookup and isinstance(item, str) and item in lookup:
-            elements.append(lookup[item])
-    return elements

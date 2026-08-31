@@ -1,3 +1,3 @@
-from .agent import MobileStaticAgent
+from .agent import mobile_static_analysis_agent
 
-__all__ = ["MobileStaticAgent"]
+__all__ = ["mobile_static_analysis_agent"]

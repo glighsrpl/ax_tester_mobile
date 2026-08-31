@@ -44,6 +44,8 @@ def run_save_mobile(state: MutableMapping[Any, Any]) -> dict[str, Any]:
     if not navigator_data:
         raise ValueError("Missing mobile navigator data.")
     static_results = _state_value(state, ContextKey.MOBILE_STATIC_RESULTS)
+    if isinstance(static_results, Mapping) and isinstance(static_results.get("issue_list"), list):
+        static_results = [{"result": static_results}]
 
     report_artifact = save_mobile_report(
         app_package=_state_str(state, ContextKey.MOBILE_APP_PACKAGE),
