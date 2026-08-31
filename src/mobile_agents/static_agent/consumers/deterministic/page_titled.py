@@ -41,7 +41,7 @@ def _build_issue(title: str) -> Issue:
             else f"Screen activity title '{title}' is generic and does not identify the screen purpose."
         ),
         severity="serious" if missing else "moderate",
-        source="deterministic",
+        source="deterministic_analyzer",
         confidence="high",
         html_snippet=f"activity_title={title or '-'}",
         fix="Provide a concise, descriptive activity title that identifies the screen purpose.",

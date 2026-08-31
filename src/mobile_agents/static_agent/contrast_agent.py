@@ -33,7 +33,7 @@ def get_contrast_instruction(tool_context: ToolContext) -> str:
         or obscured area. When contrast cannot be assessed reliably, omit the issue.
         Return only the Report schema with tool_name "contrast_agent", page set to the
         current mobile activity, and total_issues equal to issue_list length. Use source
-        "contrast_agent" and confidence "medium". Include element index, bounds,
+        "llm/contrast_agent" and confidence "medium". Include element index, bounds,
         class, activity, snapshot_id, and the observed foreground/background colors or
         visual evidence in html_snippet.
 

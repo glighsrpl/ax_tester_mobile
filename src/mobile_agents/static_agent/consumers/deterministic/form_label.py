@@ -83,7 +83,7 @@ class FormLabelConsumer(BaseConsumer):
             wcag_rule=WCAG_RULE,
             description=description,
             severity=severity,
-            source="deterministic",
+            source="deterministic_analyzer",
             confidence="high",
             html_snippet=(
                 f"class={element.class_name or '-'} resource-id={element.resource_id or '-'} "

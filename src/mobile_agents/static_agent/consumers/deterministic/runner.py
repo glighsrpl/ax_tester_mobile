@@ -25,7 +25,7 @@ class DeterministicRunner:
 
     def _consume_snapshot(self, snapshot: MobileScanSnapshot) -> list[Issue]:
         return [
-            issue.model_copy(update={"source": "deterministic"})
+            issue.model_copy(update={"source": "deterministic_analyzer"})
             for consumer in self.snapshot_consumers
             for issue in consumer.consume(snapshot)
         ]
@@ -34,7 +34,7 @@ class DeterministicRunner:
         issues: list[Issue] = []
         for consumer in self.element_consumers:
             issues.extend(
-                issue.model_copy(update={"source": "deterministic"}) for issue in consumer.consume(element)
+                issue.model_copy(update={"source": "deterministic_analyzer"}) for issue in consumer.consume(element)
             )
         return issues
 

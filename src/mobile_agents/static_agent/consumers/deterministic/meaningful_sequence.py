@@ -78,7 +78,7 @@ def _build_issue(first_element: MobileElementInfo, second_element: MobileElement
             "Accessibility tree order places an element substantially below the following element in visual order."
         ),
         severity="moderate",
-        source="deterministic",
+        source="deterministic_analyzer",
         confidence="medium",
         html_snippet=(
             f"first_index={first_element.index} first_bounds={first_element.bounds}; "

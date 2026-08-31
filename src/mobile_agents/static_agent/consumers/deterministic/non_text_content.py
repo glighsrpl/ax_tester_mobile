@@ -32,7 +32,7 @@ class NonTextContentConsumer(BaseConsumer):
             wcag_rule=WCAG_RULE,
             description="Interactive image has no programmatically determinable text alternative.",
             severity="serious",
-            source="deterministic",
+            source="deterministic_analyzer",
             confidence="high",
             html_snippet=(
                 f"class={element.class_name or '-'} resource-id={element.resource_id or '-'} "

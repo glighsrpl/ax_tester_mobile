@@ -7,13 +7,15 @@ SourceType = Literal[
     "axe-core",
     "llm",
     "both",
+    # web sources
     "llm/image-analyzer",
     "llm/focus_visible_analyzer",
     "llm/link_purpose_analyzer",
     "llm/on_focus_analyzer",
     "llm/no_keyboard_trap",
-    "deterministic",
-    "contrast_agent",
+    # mobile sources
+    "deterministic_analyzer",
+    "llm/contrast_agent",
 ]
 ConfidenceLevel = Literal["high", "medium", "low"]
 WcagRule = Literal[

@@ -21,8 +21,9 @@ def get_mobile_merge_instruction(tool_context: ToolContext) -> str:
         Merge the following mobile accessibility reports into one Report schema.
 
         Preserve every supported issue. De-duplicate only issues that have the same
-        WCAG rule, element evidence, and description. Preserve each issue's source:
-        "deterministic" for rules-based findings, "contrast_agent" for visual findings,
+        WCAG rule, and html_snippet, substitute their source with "both". 
+        If the issue is detected by only one source, preserve each issue's source:
+        "deterministic_analyzer" for rules-based findings, "llm/contrast_agent" for visual findings,
         and "llm" for LLM findings.
 
         Deterministic report:

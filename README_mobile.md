@@ -19,13 +19,12 @@ flowchart LR
     K --> S
     S -->|returns| O
     O -->|passes snapshots| A[Static Agent]
-    A --> C[Consumer 1..N<br/>for each snapshot]
-    C --> R[Results / report]
+    A --> R[Results / report]
 ```
 
 ## 3. Future Improvements
 
-1. **Parallelization** — Run Navigator and keyboard scans across N emulators assigned to different app sections; stream snapshots to the Static Agent through an asynchronous queue; and parallelize consumers after navigation.
+1. **Parallelization** — Run Navigator and keyboard scans across N emulators assigned to different app sections; stream snapshots to the Static Agent through an asynchronous queue; and parallelize consumers after navigation. || DONE
 2. **Semantic Agent** — Crop screenshot regions using element bounds and send them to a multimodal LLM to assess `contentDescription` adequacy and classify images as decorative or informative, covering WCAG 1.1.1.
 3. **Static Agent → `LlmAgent` evolution** — Promote the Static Agent to an ADK sub-runner and add LLM-based consumers for subjective checks such as title adequacy, label quality, visual layout relationships, and reading order in complex layouts.
 4. **Additional consumers** — Add `ContrastConsumer` for pixel analysis, `OrientationConsumer`, event-based `NotificationConsumer`, and `DialogFocusTrapConsumer`.
@@ -52,3 +51,19 @@ From an MCP client, use the tools in this order:
 ```
 
 Only `app_package` and `app_activity` are required. `capability_id` may be omitted when exactly one device is detected. The tool returns the test result and a report ID; use `get_report_file` with that ID and `json`, `powerpoint`, or `excel` to retrieve a report.
+
+## 5. Implemented Rules
+
+| WCAG success criterion | Implemented check | Responsible sub-agent / component |
+| --- | --- | --- |
+| 1.1.1 Non-text Content | Detects interactive images without a programmatically determinable text alternative. | Static Agent - `NonTextContentConsumer` (deterministic) |
+| 1.3.1 Info and Relationships; 3.3.2 Labels or Instructions | Detects `EditText` controls with no label, generic hints, or no specific input type. | Static Agent - `FormLabelConsumer` (deterministic) |
+| 1.3.2 Meaningful Sequence | Detects significant mismatches between accessibility-tree order and visual reading order. | Static Agent - `MeaningfulSequenceConsumer` (deterministic) |
+| 1.4.3 Contrast (Minimum) | Evaluates screenshot evidence for insufficient text contrast. | Static Agent - `MobileStaticContrastAgent` (LLM) |
+| 1.4.11 Non-text Contrast | Evaluates screenshot evidence for insufficient contrast of UI components and meaningful graphics. | Static Agent - `MobileStaticContrastAgent` (LLM) |
+| 2.4.2 Page Titled | Detects missing or generic Android activity titles. | Static Agent - `PageTitledConsumer` (deterministic) |
+| 2.5.3 Label in Name | Detects interactive controls whose accessible name does not include their visible label. | Static Agent - `LabelInNameConsumer` (deterministic) |
+| 2.5.8 Target Size (Minimum) | Detects interactive touch targets smaller than 48 x 48 dp, excluding inline text exceptions. | Static Agent - `TouchTargetConsumer` (deterministic) |
+| 4.1.2 Name, Role, Value | Detects interactive controls with missing meaningful names, semantic roles, states, or values. | Static Agent - `NameRoleValueConsumer` (deterministic) |
+
+`MobileStaticInitAgent` also performs an evidence-based LLM analysis against the Android and iOS mobile criteria defined in `src/prompts/wcag_mobile.yml`. It reports only violations supported by the collected accessibility snapshot. The `MobileMergeReportsAgent` merges deterministic, contrast, and LLM findings into the final report.

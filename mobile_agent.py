@@ -1,91 +1,32 @@
 """ADK entrypoint for the mobile ax-tester agent."""
 
-import asyncio
 import logging
-from collections.abc import AsyncGenerator
-from dataclasses import dataclass
-from typing import Protocol
 
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import MODEL, MobileContextKey
-from mobile_tools.guided_navigator import MobileGuidedNavigatorTool
-from mobile_tools.screen_scanner import MobileScanSnapshot, MobileScreenScannerTool
-from mobile_tools.utils.queue_utils import StaticAnalyzer, consume_static_snapshots
+from mobile_tools.screen_scanner import MobileScreenScannerTool
+from mobile_tools.utils.mobile_pipeline import (
+    MobileStaticAnalyzer,
+    activity_count,
+    report_label,
+    run_guided_navigation,
+    run_mobile_pipeline,
+    state_string,
+)
 from mobile_tools.utils.report_utils import (
-    deterministic_report,
     flatten_issues_by_activity,
-    issues_by_activity,
-    merge_static_reports,
     save_source_reports,
 )
 from mobile_tools.utils.session import MOBILE_SESSION
-from mobile_tools.utils.snapshot_utils import build_static_debug_payload, build_static_snapshot_payload
-from mobile_tools.utils.static_analysis_utils import StaticSnapshotReports, run_mobile_merge, run_static_snapshot
-from schemas import Issue, Report
 from tools.saver_tool import generate_run_timestamp
 from utils.report_store import REPORTS_ROOT
 
+MAX_CONCURRENT_STATIC_ANALYSES = 4
 logger = logging.getLogger(__name__)
 
-MAX_CONCURRENT_STATIC_ANALYSES = 4
-
 __all__ = ["flatten_issues_by_activity", "mobile_root_agent", "run_mobile_test"]
-
-
-@dataclass(frozen=True)
-class _StaticAnalysisResult:
-    report: Report
-    deterministic_report: Report
-    contrast_report: Report
-    llm_report: Report
-    issues_by_activity: dict[str, list[Issue]]
-    debug_data: list[dict[str, object]]
-
-
-class _SnapshotNavigator(Protocol):
-    def navigate(self) -> AsyncGenerator[MobileScanSnapshot, None]: ...
-
-    def result(self) -> dict[str, object]: ...
-
-
-class _MobileStaticAnalyzer:
-    async def analyze(self, snapshot: MobileScanSnapshot, snapshot_index: int) -> dict[str, object]:
-        snapshot_payload = build_static_snapshot_payload(snapshot, snapshot_index)
-        debug_data = build_static_debug_payload(snapshot_payload)
-        try:
-            llm_reports = await run_static_snapshot(snapshot_payload)
-        except Exception:
-            logger.exception("LLM static analysis failed for snapshot %s", snapshot.snapshot_id)
-            llm_reports = _empty_llm_reports(snapshot)
-        return {
-            "deterministic_report": deterministic_report(snapshot),
-            "contrast_report": llm_reports.contrast_report,
-            "llm_report": llm_reports.llm_report,
-            "debug_data": debug_data,
-        }
-
-
-def _empty_llm_reports(snapshot: MobileScanSnapshot) -> StaticSnapshotReports:
-    page = f"mobile://{snapshot.activity}"
-    metadata = [{"key": "snapshot_id", "value": snapshot.snapshot_id}]
-    return StaticSnapshotReports(
-        contrast_report=Report(
-            tool_name="contrast_agent",
-            total_issues=0,
-            page=page,
-            issue_list=[],
-            metadata=metadata,
-        ),
-        llm_report=Report(
-            tool_name="llm",
-            total_issues=0,
-            page=page,
-            issue_list=[],
-            metadata=metadata,
-        ),
-    )
 
 
 MOBILE_ROOT_AGENT_INSTRUCTION = """
@@ -111,16 +52,18 @@ async def run_mobile_test(
     max_activities: int = 3,
     max_depth: int = 5,
 ) -> dict[str, object]:
-    app_package = _state_str(tool_context, MobileContextKey.APP_PACKAGE)
-    app_activity = _state_str(tool_context, MobileContextKey.APP_ACTIVITY)
-    capability_id = _state_str(tool_context, MobileContextKey.CAPABILITY_ID)
+    app_package = state_string(tool_context.state, MobileContextKey.APP_PACKAGE)
+    app_activity = state_string(tool_context.state, MobileContextKey.APP_ACTIVITY)
+    capability_id = state_string(tool_context.state, MobileContextKey.CAPABILITY_ID)
     if not app_package or not app_activity or not capability_id:
         raise ValueError("Missing mobile app package, activity, or capability id.")
 
     resolved_max_steps = max(int(max_steps), 1)
     resolved_max_activities = max(int(max_activities), 1)
     resolved_max_depth = max(int(max_depth), 0)
-    resolved_instructions = instructions.strip() or _state_str(tool_context, MobileContextKey.INSTRUCTIONS)
+    resolved_instructions = instructions.strip() or state_string(
+        tool_context.state, MobileContextKey.INSTRUCTIONS
+    )
     tool_context.state[MobileContextKey.MAX_STEPS] = resolved_max_steps
     tool_context.state[MobileContextKey.MAX_ACTIVITIES] = resolved_max_activities
     tool_context.state[MobileContextKey.MAX_DEPTH] = resolved_max_depth
@@ -133,8 +76,8 @@ async def run_mobile_test(
         raise RuntimeError(f"Empty UI tree from device {serial}, session may not be ready")
 
     try:
-        guided_path = await _run_guided_navigation(resolved_instructions, resolved_max_steps)
-        report_id = f"{generate_run_timestamp()}_{_report_label(app_package)}"
+        guided_path = await run_guided_navigation(resolved_instructions, resolved_max_steps)
+        report_id = f"{generate_run_timestamp()}_{report_label(app_package)}"
         navigator = MobileScreenScannerTool(
             {
                 "max_steps": resolved_max_steps,
@@ -145,7 +88,11 @@ async def run_mobile_test(
                 "screenshot_output_dir": str(REPORTS_ROOT / report_id / "screenshots"),
             }
         )
-        navigator_data, static_analysis = await _run_mobile_pipeline(navigator, _MobileStaticAnalyzer())
+        navigator_data, static_analysis = await run_mobile_pipeline(
+            navigator,
+            MobileStaticAnalyzer(),
+            MAX_CONCURRENT_STATIC_ANALYSES,
+        )
         navigator_data["report_id"] = report_id
         navigator_data["path"] = [*guided_path, *navigator_data.get("path", [])]
         save_source_reports(
@@ -172,7 +119,7 @@ async def run_mobile_test(
 
     return {
         "status": "success",
-        "activities": _activity_count(navigator_data),
+        "activities": activity_count(navigator_data),
         "final_response": "Mobile navigation and static analysis completed.",
         "static_results": static_results,
     }
@@ -185,85 +132,3 @@ mobile_root_agent = LlmAgent(
     instruction=MOBILE_ROOT_AGENT_INSTRUCTION,
     tools=[run_mobile_test],
 )
-
-
-def _state_str(tool_context: ToolContext, key: MobileContextKey) -> str:
-    return str(tool_context.state.get(key) or tool_context.state.get(str(key)) or "").strip()
-
-
-def _activity_count(data: dict[str, object]) -> int:
-    activities = data.get("visited_activities") or []
-    return len(activities) if isinstance(activities, list) else 0
-
-
-def _report_label(value: str) -> str:
-    return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"
-
-
-async def _run_guided_navigation(instructions: str, max_steps: int) -> list[str]:
-    if not instructions:
-        return []
-    result = await MobileGuidedNavigatorTool({"instructions": instructions, "max_steps": max_steps}).execute()
-    if not result.is_success():
-        raise RuntimeError(result.error or "Mobile guided navigation failed.")
-    return result.data.get("path", []) if isinstance(result.data, dict) else []
-
-
-async def _run_mobile_pipeline(
-    navigator: _SnapshotNavigator,
-    static_agent: StaticAnalyzer,
-) -> tuple[dict[str, object], _StaticAnalysisResult]:
-    queue: asyncio.Queue[tuple[int, MobileScanSnapshot] | None] = asyncio.Queue()
-    async with asyncio.TaskGroup() as task_group:
-        workers = [
-            task_group.create_task(consume_static_snapshots(queue, static_agent))
-            for _ in range(MAX_CONCURRENT_STATIC_ANALYSES)
-        ]
-        try:
-            async for snapshot_index, snapshot in _indexed_snapshots(navigator):
-                await queue.put((snapshot_index, snapshot))
-        finally:
-            for _ in workers:
-                await queue.put(None)
-
-    analyses = sorted(
-        (analysis for worker in workers for analysis in worker.result()),
-        key=lambda analysis: analysis.snapshot_index,
-    )
-    navigator_data = navigator.result()
-    deterministic = merge_static_reports(
-        [analysis.deterministic_report for analysis in analyses], len(analyses), tool_name="deterministic"
-    )
-    contrast = merge_static_reports(
-        [analysis.contrast_report for analysis in analyses], len(analyses), tool_name="contrast_agent"
-    )
-    llm = merge_static_reports([analysis.llm_report for analysis in analyses], len(analyses), tool_name="llm")
-    activity_issues = issues_by_activity(analyses, navigator_data)
-    return navigator_data, _StaticAnalysisResult(
-        report=await _merge_reports(deterministic, contrast, llm, activity_issues),
-        deterministic_report=deterministic,
-        contrast_report=contrast,
-        llm_report=llm,
-        issues_by_activity=activity_issues,
-        debug_data=[analysis.debug_data for analysis in analyses],
-    )
-
-
-async def _indexed_snapshots(
-    navigator: _SnapshotNavigator,
-) -> AsyncGenerator[tuple[int, MobileScanSnapshot], None]:
-    snapshot_index = 0
-    async for snapshot in navigator.navigate():
-        yield snapshot_index, snapshot
-        snapshot_index += 1
-
-
-async def _merge_reports(
-    deterministic: Report,
-    contrast: Report,
-    llm: Report,
-    activity_issues: dict[str, list[Issue]],
-) -> Report:
-    if not deterministic.issue_list and not contrast.issue_list and not llm.issue_list:
-        return merge_static_reports([], 0, activity_issues, tool_name="mobile")
-    return await run_mobile_merge(deterministic, contrast, llm)

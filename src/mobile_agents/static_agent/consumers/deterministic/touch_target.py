@@ -47,7 +47,7 @@ class TouchTargetConsumer(BaseConsumer):
                 f"below the minimum {self.min_size:.0f}x{self.min_size:.0f}dp."
             ),
             severity=severity,
-            source="deterministic",
+            source="deterministic_analyzer",
             confidence="high",
             html_snippet=(
                 f"class={element.class_name or '-'} resource-id={element.resource_id or '-'} "
