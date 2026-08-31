@@ -35,6 +35,7 @@ class MobileElementInfo:
     label_for: str | None = None
     input_type: str | None = None
     parent_index: int | None = None
+    important_for_accessibility: str | None = None
 
     def get_label(self) -> str:
         return self.content_desc or self.text or self.resource_id or ""

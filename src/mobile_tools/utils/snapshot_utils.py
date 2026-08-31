@@ -104,6 +104,7 @@ def _element_payload(element: MobileElementInfo) -> dict[str, object]:
         "label_for": _trim_text(element.label_for),
         "input_type": _trim_text(element.input_type),
         "parent_index": element.parent_index,
+        "important_for_accessibility": _trim_text(element.important_for_accessibility),
     }
 
 

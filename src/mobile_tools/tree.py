@@ -43,6 +43,9 @@ def parse_mobile_tree(
             label_for=_attr(node, "labelFor", "label-for", "labeled-by", "labelledBy"),
             input_type=_raw_attr(node, "inputType", "input-type"),
             parent_index=parent_indices.get(node),
+            important_for_accessibility=_raw_attr(
+                node, "importantForAccessibility", "important-for-accessibility"
+            ),
         )
         for index, node in enumerate(nodes)
         if node is not root
