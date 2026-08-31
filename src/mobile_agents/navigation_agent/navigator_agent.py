@@ -1,20 +1,20 @@
 from google.adk.agents.llm_agent import LlmAgent
 
 from common import MODEL
-from mobile_tools.agent_tools import run_mobile_screen_scan
+from mobile_tools.agent_tools import run_mobile_keyboard_navigation
 
 MOBILE_NAVIGATOR_INSTRUCTION = """
-You are the Android mobile navigator, with the ability to scan app screens for accessibility testing.
+You collect keyboard-navigation evidence for mobile accessibility testing.
 
 Rules:
-1. Call `run_mobile_screen_scan` once.
+1. Call `run_mobile_keyboard_navigation` once.
 2. Return only a brief confirmation.
 """
 
-mobile_navigator_agent = LlmAgent(
-    name="MobileNavigatorAgent",
+mobile_keyboard_navigator_agent = LlmAgent(
+    name="MobileKeyboardNavigatorAgent",
     model=MODEL,
-    description="Scans Android app screens for accessibility testing.",
+    description="Collects mobile keyboard-navigation evidence.",
     instruction=MOBILE_NAVIGATOR_INSTRUCTION,
-    tools=[run_mobile_screen_scan],
+    tools=[run_mobile_keyboard_navigation],
 )

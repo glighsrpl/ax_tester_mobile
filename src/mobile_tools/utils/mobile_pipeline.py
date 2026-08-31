@@ -6,7 +6,6 @@ from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
-from common import MobileContextKey
 from mobile_tools.screen_scanner import MobileScanSnapshot
 from mobile_tools.utils.queue_utils import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
 from mobile_tools.utils.report_utils import deterministic_report
@@ -131,22 +130,6 @@ async def aggregate_static_analyses(
         issues_by_activity=activity_issues,
         debug_data=[analysis.debug_data for analysis in analyses],
     )
-
-
-def state_string(state: Mapping[object, object], key: MobileContextKey) -> str:
-    """Return a trimmed string value from enum or string context keys."""
-    return str(state.get(key) or state.get(str(key)) or "").strip()
-
-
-def activity_count(data: Mapping[str, object]) -> int:
-    """Return the number of visited activities in navigator output."""
-    activities = data.get("visited_activities") or []
-    return len(activities) if isinstance(activities, list) else 0
-
-
-def report_label(value: str) -> str:
-    """Convert an app identifier into a safe report-directory label."""
-    return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"
 
 
 async def _deterministic_snapshot_report(snapshot: MobileScanSnapshot) -> Report:

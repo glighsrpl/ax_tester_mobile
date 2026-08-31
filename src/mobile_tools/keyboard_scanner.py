@@ -46,7 +46,6 @@ class MobileKeyboardScannerTool(Tool):
 
             reached: set[str] = set()
             reached_elements: dict[str, MobileElementInfo] = {}
-            focus_order: list[str] = []
             focused_elements: list[MobileElementInfo] = []
             traps: list[str] = []
             trap_data: list[dict] = []
@@ -59,7 +58,6 @@ class MobileKeyboardScannerTool(Tool):
                 if focused is None:
                     continue
                 key = focused.get_focus_key()
-                focus_order.append(key)
                 focused_elements.append(focused)
                 self._consume_focus(snapshot, focused, previous, total_steps)
                 previous = focused
@@ -82,7 +80,6 @@ class MobileKeyboardScannerTool(Tool):
                 if focused is None:
                     break
                 key = focused.get_focus_key()
-                focus_order.append(key)
                 focused_elements.append(focused)
                 self._consume_focus(snapshot, focused, previous, total_steps)
                 previous = focused

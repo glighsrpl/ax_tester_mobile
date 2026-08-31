@@ -13,7 +13,6 @@ from uuid import uuid4
 from xml.etree import ElementTree
 
 from mobile_tools.base import MobileElementInfo, is_in_place_control
-from mobile_tools.keyboard_scanner import MobileKeyboardScannerTool
 from mobile_tools.tree import bounds_center, bounds_size, get_interactive_elements, parse_mobile_tree
 from mobile_tools.utils.session import MOBILE_SESSION, get_mobile_run_logs_dir
 from tools.base import Tool, ToolResult, ToolStatus
@@ -29,13 +28,40 @@ DEFAULT_SCREENSHOT_REPORTS_DIR = Path("/tmp/mobile_reports")
 
 @dataclass(frozen=True)
 class MobileScanSnapshot:
-    """Represents a snapshot of the mobile screen at a specific point in time, including the current activity, accessibility tree, screenshot, and parsed elements."""
+    """One captured mobile screen and the navigation path that reached it."""
 
     activity: str
     tree_xml: str
     screenshot: str
     elements: list[MobileElementInfo]
     snapshot_id: str = field(default_factory=lambda: str(uuid4()))
+    navigation_path: tuple[str, ...] = ()
+    tree_path: str | None = None
+
+
+@dataclass(frozen=True)
+class MobileScreenNavigationResult:
+    """The complete touch-navigation dataset consumed by downstream analysis."""
+
+    snapshots: tuple[MobileScanSnapshot, ...]
+    page_screenshot: str | None
+    activity_screenshots: dict[str, str | None]
+    snapshot_screenshots: dict[str, str]
+    visited_activities: tuple[str, ...]
+    path: tuple[str, ...]
+    steps: int
+
+    def as_dict(self) -> dict[str, Any]:
+        """Serialize the result for existing state and report consumers."""
+        return {
+            "page_screenshot": self.page_screenshot,
+            "activity_screenshots": dict(self.activity_screenshots),
+            "snapshot_screenshots": dict(self.snapshot_screenshots),
+            "visited_activities": list(self.visited_activities),
+            "path": list(self.path),
+            "steps": self.steps,
+            "snapshots": [asdict(snapshot) for snapshot in self.snapshots],
+        }
 
 
 class MobileScreenScannerTool(Tool):
@@ -55,7 +81,6 @@ class MobileScreenScannerTool(Tool):
         self._screen_activities: dict[str, str] = {}
         self._visited_activities: list[str] = []
         self._activity_screenshots: dict[str, str] = {}
-        self._keyboard_results: list[dict[str, Any]] = []
         self._path: list[str] = []
         self._page_screenshot: str | None = None
         self._page_screenshot_id: str | None = None
@@ -95,13 +120,13 @@ class MobileScreenScannerTool(Tool):
         max_depth: int | None = None,
         target_app_package: str | None = None,
     ) -> None:
-        async for snapshot in self.navigate(
+        async for _ in self.navigate(
             max_steps=max_steps,
             max_activities=max_activities,
             max_depth=max_depth,
             target_app_package=target_app_package,
         ):
-            self._snapshots.append(snapshot)
+            pass
 
     async def navigate(
         self,
@@ -416,31 +441,8 @@ class MobileScreenScannerTool(Tool):
             reserved_actions=reserved_actions,
             stop_at_activity_limit=stop_at_activity_limit,
         )
-        await self._run_keyboard_scan(
-            target_app_package,
-            max_steps=step_limit - self._step - reserved_actions,
-        )
         queue.extend(navigation_targets)
         return stop, tree_hash
-
-    async def _run_keyboard_scan(
-        self,
-        target_app_package: str | None,
-        *,
-        max_steps: int,
-    ) -> None:
-        if max_steps <= 0:
-            return
-        result = await MobileKeyboardScannerTool(
-            {
-                "step_budget": max_steps,
-                "target_app_package": target_app_package,
-            }
-        ).execute()
-        self._keyboard_results.append(result.data)
-        keyboard_steps = int(result.data.get("total_steps", 0))
-        self._path.extend(["dpad_down"] * keyboard_steps)
-        self._step += keyboard_steps
 
     async def _scan_horizontal(
         self,
@@ -696,16 +698,15 @@ class MobileScreenScannerTool(Tool):
             )
             for activity, screenshot in self._activity_screenshots.items()
         }
-        return {
-            "page_screenshot": page_screenshot,
-            "activity_screenshots": activity_screenshots,
-            "snapshot_screenshots": self._snapshot_screenshots,
-            "visited_activities": self._visited_activities,
-            "path": self._path,
-            "steps": self._step,
-            "keyboard_results": self._keyboard_results,
-            "snapshots": [asdict(snapshot) for snapshot in self._snapshots],
-        }
+        return MobileScreenNavigationResult(
+            snapshots=tuple(self._snapshots),
+            page_screenshot=page_screenshot,
+            activity_screenshots=activity_screenshots,
+            snapshot_screenshots=self._snapshot_screenshots,
+            visited_activities=tuple(self._visited_activities),
+            path=tuple(self._path),
+            steps=self._step,
+        ).as_dict()
 
     def _configure_screenshot_output(self, options: dict[str, Any]) -> None:
         self.screenshot_output_dir = options.get("screenshot_output_dir", self.screenshot_output_dir)
@@ -759,6 +760,7 @@ class MobileScreenScannerTool(Tool):
             )
             or snapshot.screenshot
         )
+        self._snapshots.append(snapshot)
         self._snapshot_queue.put_nowait(snapshot)
 
     async def _ensure_scope(self, target_app_package: str | None) -> None:
@@ -770,17 +772,20 @@ class MobileScreenScannerTool(Tool):
         tree = await MOBILE_SESSION.get_accessibility_tree()
         screenshot = await MOBILE_SESSION.take_screenshot()
         activity = await MOBILE_SESSION.get_current_activity()
-        self._save_tree_snapshot(tree)
+        tree_path = self._save_tree_snapshot(tree)
         return MobileScanSnapshot(
             activity=activity,
             tree_xml=tree,
             screenshot=screenshot,
             elements=parse_mobile_tree(tree, page_screenshot=screenshot),
+            navigation_path=tuple(self._path),
+            tree_path=tree_path,
         )
 
-    def _save_tree_snapshot(self, tree: str) -> None:
+    def _save_tree_snapshot(self, tree: str) -> str:
         path = get_mobile_run_logs_dir() / f"mobile_tree_{self._snapshot_index:04d}.xml"
         path.write_text(self._format_tree_snapshot(tree), encoding="utf-8")
+        return str(path)
 
     async def _scroll_down(self) -> None:
         await MOBILE_SESSION.scroll_down()

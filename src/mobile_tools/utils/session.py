@@ -4,6 +4,8 @@ import os
 import re
 import subprocess
 import time
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -37,6 +39,7 @@ ANDROID_KEYCODES = {
 }
 
 _RUN_LOGS_DIR: Path | None = None
+MOBILE_SESSION_LOCK = asyncio.Lock()
 
 
 def _project_root() -> Path:
@@ -408,3 +411,26 @@ class MobileSession:
 
 
 MOBILE_SESSION = MobileSession()
+
+
+@asynccontextmanager
+async def mobile_session(
+    capability_id: str,
+    app_package: str,
+    app_activity: str,
+) -> AsyncIterator[MobileSession]:
+    """Provide exclusive ownership of a connected mobile application session."""
+    async with MOBILE_SESSION_LOCK:
+        try:
+            await MOBILE_SESSION.connect(
+                capability_id,
+                app_package=app_package,
+                app_activity=app_activity,
+            )
+            yield MOBILE_SESSION
+        finally:
+            try:
+                await MOBILE_SESSION.terminate_app(app_package)
+            except Exception:
+                logger.warning("Unable to terminate app %s", app_package, exc_info=True)
+            await MOBILE_SESSION.disconnect()

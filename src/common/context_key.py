@@ -15,6 +15,7 @@ class MobileContextKey(StrEnum):
     NAVIGATOR_DATA = "mobile_navigator_data"
     STATIC_RESULTS = "mobile_static_results"
     STATIC_DEBUG_DATA = "mobile_static_debug_data"
+    KEYBOARD_NAVIGATION_DATA = "mobile_keyboard_navigation_data"
     DETERMINISTIC_ISSUES = "mobile_deterministic_issues"
     DETERMINISTIC_REPORT = "mobile_deterministic_report"
     CONTRAST_REPORT = "mobile_contrast_report"
