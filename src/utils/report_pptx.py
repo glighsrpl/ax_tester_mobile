@@ -16,6 +16,7 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from PIL import Image
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
@@ -183,16 +184,16 @@ def build_pptx_report(results_dir: str) -> str:
         page_url = str(page_report.get("page", "")).strip()
         page_issues = _sort_issues(_load_all_issues(page_report))
 
-        if len(page_reports) > 1:
-            page_screenshot_bytes = _get_page_screenshot_bytes(page_report)
-            _add_page_separator_slide(
-                prs,
-                page_url,
-                page_index,
-                len(page_reports),
-                len(page_issues),
-                page_screenshot_bytes,
-            )
+        #if len(page_reports) > 1:
+        page_screenshot_bytes = _get_page_screenshot_bytes(page_report)
+        _add_page_separator_slide(
+            prs,
+            page_url,
+            page_index,
+            len(page_reports),
+            len(page_issues),
+            page_screenshot_bytes,
+        )
 
         for issue in page_issues:
             global_issue_index += 1
@@ -526,8 +527,10 @@ def _add_issue_slide(
     fix = _truncate(_normalize_text(issue.get("fix"), fallback="N/A"), FIX_MAX_CHARS)
     issue_image_source = _get_issue_image_source(issue)
     issue_image_bytes = _get_issue_image_bytes(issue_image_source, issue_image_cache)
+    has_portrait_issue_image = _is_portrait_image(issue_image_bytes)
 
-    title_shape = slide.shapes.add_textbox(inches(0.4), inches(0.15), inches(9.2), inches(0.6))
+    content_width = inches(8.8) if has_portrait_issue_image else inches(9.2)
+    title_shape = slide.shapes.add_textbox(inches(0.4), inches(0.15), content_width, inches(0.6))
     title_frame = title_shape.text_frame
     title_frame.clear()
     title_paragraph = title_frame.paragraphs[0]
@@ -537,7 +540,7 @@ def _add_issue_slide(
     title_paragraph.font.name = TITLE_FONT_NAME
     title_paragraph.font.color.rgb = _to_rgb(rgb_color, REPLY_GREEN)
 
-    meta_shape = slide.shapes.add_textbox(inches(0.4), inches(0.85), inches(9.2), inches(2.05))
+    meta_shape = slide.shapes.add_textbox(inches(0.4), inches(0.85), content_width, inches(2.05))
     meta_frame = meta_shape.text_frame
     meta_frame.clear()
     meta_frame.word_wrap = True
@@ -556,7 +559,11 @@ def _add_issue_slide(
     snippet_left = inches(0.4)
     snippet_top = inches(2.5)
     snippet_height = inches(2.00)
-    snippet_width = inches(9.2) if issue_image_bytes is None else inches(5.9)
+    snippet_width = (
+        content_width
+        if has_portrait_issue_image or issue_image_bytes is None
+        else inches(5.9)
+    )
     snippet_label_width = snippet_width
 
     snippet_label_shape = slide.shapes.add_textbox(inches(0.4), inches(2.93), snippet_label_width, inches(0.3))
@@ -582,12 +589,19 @@ def _add_issue_slide(
     snippet_paragraph.font.name = SNIPPET_FONT_NAME
 
     if issue_image_bytes is not None:
-        image_left = inches(6.45)
-        image_top = inches(2.5)
-        image_width = inches(3.15)
-        image_height = inches(2.00)
+        if has_portrait_issue_image:
+            image_left = inches(9.75)
+            image_top = inches(0.85)
+            image_width = inches(2.75)
+            image_height = inches(5.85)
+        else:
+            image_left = inches(6.45)
+            image_top = inches(2.5)
+            image_width = inches(3.15)
+            image_height = inches(2.00)
+        image_label_top = inches(0.95) if has_portrait_issue_image else inches(2.93)
 
-        image_label_shape = slide.shapes.add_textbox(image_left, inches(2.93), image_width, inches(0.3))
+        image_label_shape = slide.shapes.add_textbox(image_left, image_label_top, image_width, inches(0.3))
         image_label_frame = image_label_shape.text_frame
         image_label_frame.clear()
         image_label_paragraph = image_label_frame.paragraphs[0]
@@ -602,7 +616,11 @@ def _add_issue_slide(
         image_box.line.color.rgb = rgb_color(189, 195, 199)
         _add_centered_image_to_box(slide, issue_image_bytes, image_left, image_top, image_width, image_height)
 
-    fix_label_shape = slide.shapes.add_textbox(inches(0.4), inches(4.9), inches(4.45), inches(0.3))
+    details_column_width = inches(4.1) if has_portrait_issue_image else inches(4.45)
+    exposure_left = inches(4.75) if has_portrait_issue_image else inches(5.05)
+    exposure_width = inches(4.45) if has_portrait_issue_image else inches(4.55)
+
+    fix_label_shape = slide.shapes.add_textbox(inches(0.4), inches(4.9), details_column_width, inches(0.3))
     fix_label_frame = fix_label_shape.text_frame
     fix_label_frame.clear()
     fix_label_paragraph = fix_label_frame.paragraphs[0]
@@ -611,7 +629,7 @@ def _add_issue_slide(
     fix_label_paragraph.font.bold = True
     fix_label_paragraph.font.name = BODY_FONT_NAME
 
-    fix_shape = slide.shapes.add_textbox(inches(0.4), inches(5.2), inches(4.45), inches(1.85))
+    fix_shape = slide.shapes.add_textbox(inches(0.4), inches(5.2), details_column_width, inches(1.85))
     fix_frame = fix_shape.text_frame
     fix_frame.clear()
     fix_frame.word_wrap = True
@@ -621,7 +639,7 @@ def _add_issue_slide(
     fix_paragraph.font.size = _scaled_pt(pt, 11)
     fix_paragraph.font.name = BODY_FONT_NAME
 
-    exposure_label_shape = slide.shapes.add_textbox(inches(5.05), inches(4.9), inches(4.55), inches(0.3))
+    exposure_label_shape = slide.shapes.add_textbox(exposure_left, inches(4.9), exposure_width, inches(0.3))
     exposure_label_frame = exposure_label_shape.text_frame
     exposure_label_frame.clear()
     exposure_label_paragraph = exposure_label_frame.paragraphs[0]
@@ -630,7 +648,7 @@ def _add_issue_slide(
     exposure_label_paragraph.font.bold = True
     exposure_label_paragraph.font.name = BODY_FONT_NAME
 
-    exposure_shape = slide.shapes.add_textbox(inches(5.05), inches(5.2), inches(4.55), inches(1.85))
+    exposure_shape = slide.shapes.add_textbox(exposure_left, inches(5.2), exposure_width, inches(1.85))
     exposure_frame = exposure_shape.text_frame
     exposure_frame.clear()
     exposure_frame.word_wrap = True
@@ -919,6 +937,19 @@ def _convert_svg_to_png(svg_bytes: bytes) -> bytes | None:
     except Exception as exc:
         logger.warning(f"Skipping SVG issue image because SVG conversion failed: {exc}")
         return None
+
+
+def _is_portrait_image(image_bytes: bytes | None) -> bool:
+    if image_bytes is None:
+        return False
+
+    try:
+        with Image.open(BytesIO(image_bytes)) as image:
+            width, height = image.size
+    except Exception:
+        return False
+
+    return height > width
 
 
 def _add_centered_image_to_box(

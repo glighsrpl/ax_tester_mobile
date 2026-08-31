@@ -1,11 +1,15 @@
 import asyncio
+import base64
 import hashlib
 import logging
+import os
 from collections import deque
 from collections.abc import AsyncGenerator
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 from xml.etree import ElementTree
 
 from mobile_tools.base import MobileElementInfo, is_in_place_control
@@ -18,6 +22,9 @@ logger = logging.getLogger(__name__)
 
 _HORIZONTAL_CONTAINER_CLASSES = ("horizontalscrollview", "viewpager", "viewpager2", "tablayout")
 _DRAWER_LABELS = ("open drawer", "navigate up", "open navigation", "menu", "hamburger")
+SCREENSHOT_OUTPUT_DIR_ENV = "MOBILE_SCREENSHOT_OUTPUT_DIR"
+MOBILE_RUN_ID_ENV = "MOBILE_RUN_ID"
+DEFAULT_SCREENSHOT_REPORTS_DIR = Path("/tmp/mobile_reports")
 
 
 @dataclass(frozen=True)
@@ -28,6 +35,7 @@ class MobileScanSnapshot:
     tree_xml: str
     screenshot: str
     elements: list[MobileElementInfo]
+    snapshot_id: str = field(default_factory=lambda: str(uuid4()))
 
 
 class MobileScreenScannerTool(Tool):
@@ -39,6 +47,8 @@ class MobileScreenScannerTool(Tool):
         self.max_activities = int(self.config.get("max_activities", 3))
         self.max_depth = int(self.config.get("max_depth", 5))
         self.target_app_package = self.config.get("target_app_package")
+        self.screenshot_output_dir = self.config.get("screenshot_output_dir")
+        self.run_id = self.config.get("run_id")
         self._snapshots: list[MobileScanSnapshot] = []
         self._seen_activities: set[str] = set()
         self._seen_screens: set[str] = set()
@@ -48,6 +58,10 @@ class MobileScreenScannerTool(Tool):
         self._keyboard_results: list[dict[str, Any]] = []
         self._path: list[str] = []
         self._page_screenshot: str | None = None
+        self._page_screenshot_id: str | None = None
+        self._page_screenshot_activity: str | None = None
+        self._activity_screenshot_ids: dict[str, str] = {}
+        self._snapshot_screenshots: dict[str, str] = {}
         self._step = 0
         self._step_limit = self.max_steps
         self._snapshot_index = 0
@@ -55,6 +69,7 @@ class MobileScreenScannerTool(Tool):
 
     async def execute(self, **kwargs: Any) -> ToolResult:
         try:
+            self._configure_screenshot_output(kwargs)
             await self.scan_screen(
                 max_steps=int(kwargs.get("max_steps", self.max_steps)),
                 max_activities=int(kwargs.get("max_activities", self.max_activities)),
@@ -154,6 +169,8 @@ class MobileScreenScannerTool(Tool):
         await self._ensure_scope(target_app_package)
         snapshot = await self._snapshot()
         self._page_screenshot = self._page_screenshot or snapshot.screenshot
+        self._page_screenshot_id = self._page_screenshot_id or snapshot.snapshot_id
+        self._page_screenshot_activity = self._page_screenshot_activity or self._activity_name(snapshot)
         root_hash = self._screen_hash(snapshot.tree_xml)
         self._screen_activities[root_hash] = self._activity_name(snapshot)
         screen_edges: dict[str, tuple[str, str, str] | None] = {root_hash: None}
@@ -617,6 +634,7 @@ class MobileScreenScannerTool(Tool):
         self._seen_activities.add(activity)
         self._visited_activities.append(activity)
         self._activity_screenshots[activity] = snapshot.screenshot
+        self._activity_screenshot_ids[activity] = snapshot.snapshot_id
         return True
 
     @staticmethod
@@ -665,19 +683,81 @@ class MobileScreenScannerTool(Tool):
         return ""
 
     def result(self) -> dict[str, Any]:
+        page_screenshot = self._persist_screenshot(
+            self._page_screenshot,
+            activity_name=self._page_screenshot_activity or "unknown",
+            snapshot_id=self._page_screenshot_id,
+        )
+        activity_screenshots = {
+            activity: self._persist_screenshot(
+                screenshot,
+                activity_name=activity,
+                snapshot_id=self._activity_screenshot_ids.get(activity),
+            )
+            for activity, screenshot in self._activity_screenshots.items()
+        }
         return {
-            "page_screenshot": self._page_screenshot,
-            "activity_screenshots": self._activity_screenshots,
+            "page_screenshot": page_screenshot,
+            "activity_screenshots": activity_screenshots,
+            "snapshot_screenshots": self._snapshot_screenshots,
             "visited_activities": self._visited_activities,
             "path": self._path,
             "steps": self._step,
             "keyboard_results": self._keyboard_results,
-            "snapshots": self._snapshots,
         }
+
+    def _configure_screenshot_output(self, options: dict[str, Any]) -> None:
+        self.screenshot_output_dir = options.get("screenshot_output_dir", self.screenshot_output_dir)
+        self.run_id = options.get("run_id", self.run_id)
+
+    def _persist_screenshot(
+        self,
+        screenshot: str | None,
+        *,
+        activity_name: str,
+        snapshot_id: str | None,
+    ) -> str | None:
+        if not screenshot:
+            return screenshot
+
+        screenshot_path = self._screenshot_path(activity_name, snapshot_id)
+        try:
+            screenshot_path.parent.mkdir(parents=True, exist_ok=True)
+            screenshot_path.write_bytes(base64.b64decode(screenshot, validate=True))
+        except (OSError, ValueError) as exc:
+            logger.warning("Unable to save mobile screenshot to %s: %s", screenshot_path, exc)
+            return screenshot
+        return str(screenshot_path)
+
+    def _screenshot_path(self, activity_name: str, snapshot_id: str | None) -> Path:
+        output_dir = self._screenshot_output_dir()
+        filename = f"{self._file_label(activity_name)}_{snapshot_id or 'unknown'}.png"
+        return (output_dir / filename).resolve()
+
+    def _screenshot_output_dir(self) -> Path:
+        configured_dir = self.screenshot_output_dir or os.getenv(SCREENSHOT_OUTPUT_DIR_ENV)
+        if configured_dir:
+            return Path(str(configured_dir)).expanduser()
+        run_id = self.run_id or os.getenv(MOBILE_RUN_ID_ENV) or get_mobile_run_logs_dir().name
+        return DEFAULT_SCREENSHOT_REPORTS_DIR / self._file_label(str(run_id)) / "screenshots"
+
+    @staticmethod
+    def _file_label(value: str) -> str:
+        return (
+            "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "unknown"
+        )
 
     def _emit_snapshot(self, snapshot: MobileScanSnapshot) -> None:
         if self._snapshot_queue is None:
             raise RuntimeError("Mobile navigation snapshot stream is not active.")
+        self._snapshot_screenshots[snapshot.snapshot_id] = (
+            self._persist_screenshot(
+                snapshot.screenshot,
+                activity_name=self._activity_name(snapshot),
+                snapshot_id=snapshot.snapshot_id,
+            )
+            or snapshot.screenshot
+        )
         self._snapshot_queue.put_nowait(snapshot)
 
     async def _ensure_scope(self, target_app_package: str | None) -> None:

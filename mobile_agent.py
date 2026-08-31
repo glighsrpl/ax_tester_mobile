@@ -19,6 +19,8 @@ from mobile_tools.guided_navigator import MobileGuidedNavigatorTool
 from mobile_tools.screen_scanner import MobileScanSnapshot, MobileScreenScannerTool
 from mobile_tools.utils.session import MOBILE_SESSION
 from schemas import Issue, Report, ScoreInfo
+from tools.saver_tool import generate_run_timestamp
+from utils.report_store import REPORTS_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +32,14 @@ MAX_TEXT_CHARS = 160
 @dataclass(frozen=True)
 class _StaticAnalysisResult:
     report: Report
+    issues_by_activity: dict[str, list[Issue]]
     debug_data: list[dict[str, object]]
 
 
 @dataclass(frozen=True)
 class _SnapshotAnalysis:
+    activity: str
+    snapshot_id: str
     report: Report
     debug_data: dict[str, object]
 
@@ -125,15 +130,19 @@ async def run_mobile_test(
 
     try:
         guided_path = await _run_guided_navigation(resolved_instructions, resolved_max_steps)
+        report_id = _mobile_report_id(app_package)
         navigator = MobileScreenScannerTool(
             {
                 "max_steps": resolved_max_steps,
                 "max_activities": resolved_max_activities,
                 "max_depth": resolved_max_depth,
                 "target_app_package": app_package,
+                "run_id": report_id,
+                "screenshot_output_dir": str(REPORTS_ROOT / report_id / "screenshots"),
             }
         )
         navigator_data, static_analysis = await _run_mobile_pipeline(navigator, _MobileStaticAnalyzer())
+        navigator_data["report_id"] = report_id
         navigator_data["path"] = [*guided_path, *navigator_data.get("path", [])]
     finally:
         try:
@@ -144,6 +153,10 @@ async def run_mobile_test(
 
     tool_context.state[MobileContextKey.NAVIGATOR_DATA] = navigator_data
     static_results = static_analysis.report.model_dump(mode="json")
+    static_results["issues_by_activity"] = {
+        activity: [issue.model_dump(mode="json") for issue in issues]
+        for activity, issues in static_analysis.issues_by_activity.items()
+    }
     tool_context.state[MobileContextKey.STATIC_RESULTS] = static_results
     tool_context.state[MobileContextKey.STATIC_DEBUG_DATA] = static_analysis.debug_data
 
@@ -173,6 +186,14 @@ def _activity_count(data: dict[str, object]) -> int:
     return len(activities) if isinstance(activities, list) else 0
 
 
+def _mobile_report_id(app_package: str) -> str:
+    return f"{generate_run_timestamp()}_{_report_label(app_package)}"
+
+
+def _report_label(value: str) -> str:
+    return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"
+
+
 async def _run_guided_navigation(instructions: str, max_steps: int) -> list[str]:
     if not instructions:
         return []
@@ -188,21 +209,20 @@ async def _run_mobile_pipeline(
 ) -> tuple[dict[str, object], _StaticAnalysisResult]:
     queues = _PipelineQueues(static=asyncio.Queue(), semantic=asyncio.Queue())
     static_task = asyncio.create_task(_consume_static_snapshots(queues.static, static_agent))
-    snapshots: list[MobileScanSnapshot] = []
     analyses: list[_SnapshotAnalysis] = []
     try:
         async for snapshot in navigator.navigate():
-            snapshots.append(snapshot)
             await queues.static.put(snapshot)
     finally:
         await queues.static.put(None)
         analyses = await static_task
 
     navigator_data = navigator.result()
-    navigator_data["snapshots"] = snapshots
     reports = [analysis.report for analysis in analyses]
+    issues_by_activity = _issues_by_activity(analyses, navigator_data)
     return navigator_data, _StaticAnalysisResult(
-        report=_merge_static_reports(reports, len(snapshots)),
+        report=_merge_static_reports(reports, len(analyses), issues_by_activity),
+        issues_by_activity=issues_by_activity,
         debug_data=[analysis.debug_data for analysis in analyses],
     )
 
@@ -219,7 +239,14 @@ async def _consume_static_snapshots(
             debug_data = result.get("debug_data")
             if not isinstance(report, Report) or not isinstance(debug_data, dict):
                 raise TypeError("Static snapshot analysis returned an invalid result.")
-            analyses.append(_SnapshotAnalysis(report=report, debug_data=debug_data))
+            analyses.append(
+                _SnapshotAnalysis(
+                    activity=snapshot.activity,
+                    snapshot_id=snapshot.snapshot_id,
+                    report=report,
+                    debug_data=debug_data,
+                )
+            )
         except Exception:
             logger.exception("Static analysis failed for mobile snapshot; continuing pipeline")
     return analyses
@@ -261,7 +288,7 @@ def _static_snapshot_payload(
 ) -> dict[str, object]:
     elements = _relevant_static_elements(snapshot.elements)
     return {
-        "snapshot_id": str(uuid4()),
+        "snapshot_id": snapshot.snapshot_id,
         "snapshot_index": snapshot_index,
         "activity": snapshot.activity,
         "tree_summary": _limited_tree_summary(elements),
@@ -364,8 +391,51 @@ def _trim_text(value: object) -> str | None:
     return text[:MAX_TEXT_CHARS] if text else None
 
 
-def _merge_static_reports(reports: list[Report], total_snapshots: int) -> Report:
-    issues = _dedupe_issues(issue for report in reports for issue in report.issue_list)
+def _issues_by_activity(
+    analyses: list[_SnapshotAnalysis],
+    navigator_data: dict[str, object],
+) -> dict[str, list[Issue]]:
+    activities = navigator_data.get("visited_activities")
+    issues_by_activity: dict[str, list[Issue]] = (
+        {str(activity).strip(): [] for activity in activities if str(activity).strip()}
+        if isinstance(activities, list)
+        else {}
+    )
+    for analysis in analyses:
+        activity = analysis.activity.strip() or "unknown"
+        activity_issues = issues_by_activity.setdefault(activity, [])
+        screenshot_path = _snapshot_screenshot_path(navigator_data, analysis.snapshot_id)
+        activity_issues.extend(
+            issue.model_copy(update={"image_url_or_path": screenshot_path})
+            for issue in analysis.report.issue_list
+        )
+    return {activity: _dedupe_issues(issues) for activity, issues in issues_by_activity.items()}
+
+
+def _snapshot_screenshot_path(navigator_data: dict[str, object], snapshot_id: str) -> str | None:
+    screenshots = navigator_data.get("snapshot_screenshots")
+    if not isinstance(screenshots, dict):
+        return None
+    screenshot_path = screenshots.get(snapshot_id)
+    return screenshot_path if isinstance(screenshot_path, str) and screenshot_path else None
+
+
+def flatten_issues_by_activity(
+    issues_by_activity: dict[str, list[Issue]],
+) -> list[Issue]:
+    """Return the legacy flat issue list without changing activity buckets."""
+    return [issue for activity_issues in issues_by_activity.values() for issue in activity_issues]
+
+
+def _merge_static_reports(
+    reports: list[Report],
+    total_snapshots: int,
+    issues_by_activity: dict[str, list[Issue]] | None = None,
+) -> Report:
+    activity_issues = issues_by_activity or {
+        "unknown": _dedupe_issues(issue for report in reports for issue in report.issue_list)
+    }
+    issues = flatten_issues_by_activity(activity_issues)
     return Report(
         tool_name="llm",
         total_issues=len(issues),

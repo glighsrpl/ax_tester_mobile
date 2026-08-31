@@ -19,7 +19,7 @@ def save_mobile_report(
     navigator_data: dict[str, Any],
     static_results: list[Any],
 ) -> dict[str, Any]:
-    report_id = f"{generate_run_timestamp()}_{_label(app_package)}"
+    report_id = _report_id(navigator_data, app_package)
     report_dir = _get_run_dir(report_id)
     reports = _build_screen_reports(
         app_package, app_activity, capability_id, navigator_data, static_results, report_id
@@ -110,7 +110,12 @@ def _build_screen_reports(
 
     for consumer in static_results:
         result = consumer.get("result", {}) if isinstance(consumer, Mapping) else {}
-        issue_list = result.get("issue_list", []) if isinstance(result, Mapping) else []
+        activity_issues = result.get("issues_by_activity", {}) if isinstance(result, Mapping) else {}
+        if isinstance(activity_issues, Mapping) and "issues_by_activity" in result:
+            _append_activity_issues(issues_by_activity, activities, activity_issues)
+            issue_list = []
+        else:
+            issue_list = result.get("issue_list", []) if isinstance(result, Mapping) else []
         if isinstance(issue_list, list):
             for issue in issue_list:
                 if not isinstance(issue, dict):
@@ -141,6 +146,23 @@ def _build_screen_reports(
     ]
 
 
+def _append_activity_issues(
+    issues_by_activity: dict[str, list[dict[str, Any]]],
+    activities: list[str],
+    activity_issues: Mapping[Any, Any],
+) -> None:
+    for raw_activity, raw_issues in activity_issues.items():
+        activity = str(raw_activity).strip() or "unknown"
+        if activity not in issues_by_activity:
+            activities.append(activity)
+            issues_by_activity[activity] = []
+        if not isinstance(raw_issues, list):
+            continue
+        issues_by_activity[activity].extend(
+            _with_activity(issue, activity) for issue in raw_issues if isinstance(issue, dict)
+        )
+
+
 def _build_screen_report(
     *,
     app_package: str,
@@ -154,16 +176,18 @@ def _build_screen_report(
     score_passed: ScoreInfo,
     score_total: ScoreInfo,
 ) -> dict[str, Any]:
-    activity_screenshots = navigator_data.get("activity_screenshots", {})
-    page_screenshot = activity_screenshots.get(activity) if isinstance(activity_screenshots, Mapping) else None
-    if page_screenshot is None and activity == (app_activity or "unknown"):
-        page_screenshot = navigator_data.get("page_screenshot")
+    activity_screenshot_paths = navigator_data.get("activity_screenshots", {})
+    screenshot_path = (
+        activity_screenshot_paths.get(activity) if isinstance(activity_screenshot_paths, Mapping) else None
+    )
+    if screenshot_path is None and activity == (app_activity or "unknown"):
+        screenshot_path = navigator_data.get("page_screenshot")
 
     return {
         "tool_name": "mobile_ax_tester",
         "total_issues": len(issues),
         "page": _mobile_page(app_package, activity),
-        "page_screenshot": page_screenshot,
+        "page_screenshot": screenshot_path,
         "date_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "issue_list": issues,
         "score_passed": score_passed.model_dump(),
@@ -189,6 +213,13 @@ def _mobile_page(app_package: str, activity: str) -> str:
     return f"mobile://{app_package}/{activity}"
 
 
+def _report_id(navigator_data: Mapping[str, Any], app_package: str) -> str:
+    configured_report_id = navigator_data.get("report_id")
+    if isinstance(configured_report_id, str) and configured_report_id.strip():
+        return configured_report_id.strip()
+    return f"{generate_run_timestamp()}_{_label(app_package)}"
+
+
 def _label(value: str) -> str:
     return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"
 
@@ -209,11 +240,7 @@ def _state_dict(state: Mapping[Any, Any], key: object) -> dict[str, Any]:
 def _visited_activities(navigator_data: Mapping[str, Any], default: str) -> list[str]:
     activities = navigator_data.get("visited_activities")
     if isinstance(activities, list):
-        values = [
-            activity
-            for activity in (str(value).strip() for value in activities)
-            if activity and (activity == "unknown" or "." in activity or "/" in activity)
-        ]
+        values = [activity for activity in (str(value).strip() for value in activities) if activity]
         if values:
             return list(dict.fromkeys(values))
     return [default or "unknown"]
