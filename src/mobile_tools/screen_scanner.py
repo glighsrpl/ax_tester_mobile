@@ -6,7 +6,7 @@ import os
 from collections import deque
 from collections.abc import AsyncGenerator
 from contextlib import suppress
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -704,6 +704,7 @@ class MobileScreenScannerTool(Tool):
             "path": self._path,
             "steps": self._step,
             "keyboard_results": self._keyboard_results,
+            "snapshots": [asdict(snapshot) for snapshot in self._snapshots],
         }
 
     def _configure_screenshot_output(self, options: dict[str, Any]) -> None:

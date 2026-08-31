@@ -18,11 +18,21 @@ def get_mobile_static_instruction(tool_context: ToolContext) -> str:
     )
     wcag_prompt = yaml.safe_dump(_mobile_wcag_rules(), sort_keys=False)
     return f"""
-        Analyze this single Android accessibility snapshot against the supplied WCAG mobile rules.
-        Report only issues supported by the snapshot data. Return only the Report schema.
+        Analyze this accessibility snapshot against the supplied WCAG mobile rules.
+
+        ## EVIDENCE POLICY — ZERO FALSE POSITIVES
+            - Report ONLY when you have CONCRETE EVIDENCE of a violation in the snapshot data.
+            - Concrete evidence = a specific element with specific attributes that directly contradict a rule's pass condition.
+            - If you cannot PROVE a violation from the data → DO NOT report it.
+            - When in doubt → SKIP. No guessing. No assumptions.
+            - Empty issue list is a valid and expected output.
+
+        Return only the Report schema.
         Use source "llm". Put element index, bounds, class, activity, and snapshot_id
         in html_snippet because they are not separate fields in the Issue schema.
-        The snapshot payload intentionally excludes screenshots; do not ask for visual evidence.
+        Infer whether the snapshot is Android or iOS from its accessibility data and
+        apply the matching platform examples; when the platform is not identifiable,
+        apply only platform-agnostic requirements.
 
         WCAG mobile rules:
         {wcag_prompt}
@@ -45,13 +55,27 @@ init_agent = LlmAgent(
 def _mobile_wcag_rules() -> dict[str, object]:
     with PROMPT_PATH.open(encoding="utf-8") as file:
         prompt = yaml.safe_load(file) or {}
-    level_a = prompt.get("levels", {}).get("A", {}) if isinstance(prompt, dict) else {}
-    criteria = level_a.get("success_criteria", []) if isinstance(level_a, dict) else []
+
+    if not isinstance(prompt, dict):
+        return {}
+
+    criteria_by_level = prompt.get("levels", {})
+    if not isinstance(criteria_by_level, dict):
+        criteria_by_level = {}
+
+    success_criteria = [
+        _compact_criterion(criterion)
+        for level, rules in criteria_by_level.items()
+        if isinstance(rules, dict)
+        for criterion in rules.get("success_criteria", [])
+        if isinstance(criterion, dict) and criterion.get("level") == level
+    ]
+
     return {
         "wcag_version": prompt.get("wcag_version"),
-        "platform": prompt.get("platform"),
-        "level": "A",
-        "success_criteria": [_compact_criterion(criterion) for criterion in criteria],
+        "platforms": ["Android", "iOS"],
+        "levels": list(criteria_by_level),
+        "success_criteria": success_criteria,
     }
 
 
@@ -61,6 +85,45 @@ def _compact_criterion(criterion: object) -> dict[str, object]:
     return {
         "id": criterion.get("id"),
         "title": criterion.get("title"),
-        "description": criterion.get("description"),
-        "mobile_note": criterion.get("mobile_note"),
+        "level": criterion.get("level"),
+        "rule": _compact_text(criterion.get("description")),
+        "mobile_note": _compact_text(criterion.get("mobile_note")),
+        "examples": _compact_examples(criterion.get("examples")),
     }
+
+
+def _compact_examples(examples: object) -> list[dict[str, str]]:
+    if not isinstance(examples, list):
+        return []
+
+    selected_examples = _platform_examples(examples) or examples[:1]
+    return [
+        {
+            "platform": str(example.get("context", "")),
+            "example": _compact_text(example.get("description")),
+        }
+        for example in selected_examples[:2]
+        if isinstance(example, dict)
+    ]
+
+
+def _platform_examples(examples: list[object]) -> list[dict[str, object]]:
+    selected_examples: list[dict[str, object]] = []
+    for platform in ("Android", "iOS"):
+        example = next(
+            (
+                example
+                for example in examples
+                if isinstance(example, dict) and platform in str(example.get("context", ""))
+            ),
+            None,
+        )
+        if example:
+            selected_examples.append(example)
+    return selected_examples
+
+
+def _compact_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    return " ".join(value.split()) or None

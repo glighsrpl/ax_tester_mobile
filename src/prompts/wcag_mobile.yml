@@ -3,7 +3,6 @@
 # Adapted for native mobile applications (Android/iOS)
 
 wcag_version: "2.2"
-platform: "android"
 
 output_requirements:
   problem_schema:
@@ -24,9 +23,6 @@ levels:
   A:
     scope: "WCAG 2.2 Level A Success Criteria only"
     success_criteria:
-      # ============================================================
-      # Principle 1: Perceivable
-      # ============================================================
       - id: "1.1.1"
         title: "Non-text Content"
         level: "A"
@@ -1037,9 +1033,6 @@ levels:
   AA:
     scope: "WCAG 2.2 Level AA Success Criteria only"
     success_criteria:
-      # ============================================================
-      # Principle 1: Perceivable
-      # ============================================================
       - id: "1.2.4"
         title: "Captions (Live)"
         level: "AA"
@@ -1782,4 +1775,60 @@ levels:
           role or properties such that they can be presented to the user by
           assistive technologies without receiving focus. On mobile, this means
           using accessibility announcements or live region equivalents to convey
-          status updates, errors, loading states, and confirmations to
+          status updates, errors, loading states, and confirmations to screen
+          reader users.
+        examples:
+          - context: "Android - Toast/Snackbar"
+            description: "A Snackbar message ('Item added to cart') is automatically announced by TalkBack because Snackbar uses accessibilityLiveRegion."
+          - context: "Android - Custom status"
+            description: "A loading indicator uses View.announceForAccessibility('Loading content') or sets accessibilityLiveRegion = POLITE on a status TextView."
+          - context: "iOS - Status update"
+            description: "After a form submission, UIAccessibility.post(notification: .announcement, argument: 'Form submitted successfully') announces the status."
+          - context: "Search results"
+            description: "After search completes, '15 results found' is announced without moving focus from the search field."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Trigger actions that produce status messages (form submission, loading, errors, cart updates)"
+              - "Verify TalkBack announces the status without focus moving away"
+              - "Verify polite/assertive announcements are appropriate for message urgency"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Trigger status-producing actions"
+              - "Verify VoiceOver announces status messages"
+              - "Verify focus does not move unexpectedly"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use View.setAccessibilityLiveRegion(POLITE) on status text views. Use View.announceForAccessibility() for transient messages. Snackbar already handles this. For custom views, fire TYPE_ANNOUNCEMENT AccessibilityEvent."
+          - platform: "iOS"
+            fix: "Use UIAccessibility.post(notification: .announcement, argument: message) for status messages. Use .screenChanged only when screen content significantly changes. Set accessibilityTraits to .updatesFrequently for live data."
+
+# Metadata
+metadata:
+  total_criteria: 55
+  level_a_count: 31
+  level_aa_count: 24
+  removed_criteria:
+    - id: "4.1.1"
+      title: "Parsing"
+      reason: "Obsolete in WCAG 2.2; removed from WCAG2Mobile scope"
+  excluded_levels:
+    - "AAA"
+  platforms_covered:
+    - "Android (native)"
+    - "iOS (native)"
+    - "Flutter"
+    - "React Native (where applicable)"
+  testing_tools_referenced:
+    - "TalkBack"
+    - "VoiceOver"
+    - "Switch Access"
+    - "Switch Control"
+    - "Voice Access"
+    - "Voice Control"
+    - "Accessibility Scanner (Android)"
+    - "Xcode Accessibility Inspector"
+    - "UIAutomator"
+    - "Layout Inspector"
+    - "External Keyboard"
+  

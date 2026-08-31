@@ -41,6 +41,7 @@ class MobileContextKey(StrEnum):
     NAVIGATOR_DATA = "mobile_navigator_data"
     STATIC_RESULTS = "mobile_static_results"
     STATIC_DEBUG_DATA = "mobile_static_debug_data"
+    DETERMINISTIC_ISSUES = "mobile_deterministic_issues"
 
     # saved artifacts
     REPORT_ARTIFACT = "mobile_report_artifact"
