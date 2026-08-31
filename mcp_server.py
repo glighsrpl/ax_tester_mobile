@@ -76,15 +76,13 @@ class MobileAgentBridge:
         max_steps = state.get(str(MobileContextKey.MAX_STEPS), 50)
         max_activities = state.get(str(MobileContextKey.MAX_ACTIVITIES), 3)
         max_depth = state.get(str(MobileContextKey.MAX_DEPTH), 5)
-        instructions = str(state.get(str(MobileContextKey.INSTRUCTIONS)) or "")
-        instruction_arg = repr(instructions)
         content = genai_types.Content(
             role="user",
             parts=[
                 genai_types.Part(
                     text=(
                         "Run the mobile accessibility test now. "
-                        f"Call run_mobile_test with max_steps={max_steps}, instructions={instruction_arg}, "
+                        f"Call run_mobile_test with max_steps={max_steps}, "
                         f"max_activities={max_activities}, max_depth={max_depth}."
                     )
                 )
@@ -268,7 +266,6 @@ async def run_full_mobile_test(
     max_steps: int = 500,
     max_activities: int = 20,
     max_depth: int = 10,
-    instructions: str | None = None,
 ) -> mcp_types.CallToolResult:
     """Run the mobile accessibility flow using explicit app package/activity arguments.
 
@@ -280,9 +277,6 @@ async def run_full_mobile_test(
         max_steps: Optional. The maximum number of steps to perform during the test.
         max_activities: Optional. The maximum number of unique activities to visit during the test.
         max_depth: Optional. The maximum navigation depth from the initial mobile screen.
-        instructions: Optional. Instructions for guiding the mobile test.
-            If not provided, the tool will perform a plain accessibility scan.
-
     Only `app_package` and `app_activity` are required.
     Optional arguments should be supplied only when the caller wants to override the documented defaults,
     although MCP clients may still include default-valued arguments in the tool call.
@@ -313,7 +307,6 @@ async def run_full_mobile_test(
                 str(MobileContextKey.MAX_STEPS): max_steps,
                 str(MobileContextKey.MAX_ACTIVITIES): max_activities,
                 str(MobileContextKey.MAX_DEPTH): max_depth,
-                str(MobileContextKey.INSTRUCTIONS): (instructions or "").strip(),
             }
         )
         bridge_result["report_artifact"] = run_save_mobile(bridge_result.get("state", {}))

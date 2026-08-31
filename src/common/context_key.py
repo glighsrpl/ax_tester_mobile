@@ -10,7 +10,6 @@ class MobileContextKey(StrEnum):
     MAX_STEPS = "mobile_max_steps"
     MAX_ACTIVITIES = "mobile_max_activities"
     MAX_DEPTH = "mobile_max_depth"
-    INSTRUCTIONS = "mobile_instructions"
 
     # final outcomes
     NAVIGATOR_DATA = "mobile_navigator_data"

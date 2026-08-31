@@ -11,7 +11,6 @@ from mobile_tools.utils.mobile_pipeline import (
     MobileStaticAnalyzer,
     activity_count,
     report_label,
-    run_guided_navigation,
     run_mobile_pipeline,
     state_string,
 )
@@ -33,22 +32,19 @@ MOBILE_ROOT_AGENT_INSTRUCTION = """
 You are the root orchestrator for Android mobile accessibility testing.
 
 Use only this tool:
-- `run_mobile_test(max_steps, instructions, max_activities, max_depth)`
+- `run_mobile_test(max_steps, max_activities, max_depth)`
 
 Rules:
 1. The Android app target is provided by the caller.
 2. Call `run_mobile_test` exactly once.
-3. Pass explicit tap/click/open/navigation requests through `instructions`.
-4. Pass empty `instructions` for a plain current-screen accessibility scan.
-5. Do not ask for confirmations.
-6. Return a short summary with tested activities.
+3. Do not ask for confirmations.
+4. Return a short summary with tested activities.
 """
 
 
 async def run_mobile_test(
     tool_context: ToolContext,
     max_steps: int = 500,
-    instructions: str = "",
     max_activities: int = 3,
     max_depth: int = 5,
 ) -> dict[str, object]:
@@ -62,13 +58,9 @@ async def run_mobile_test(
     resolved_max_steps = max(int(max_steps), 1)
     resolved_max_activities = max(int(max_activities), 1)
     resolved_max_depth = max(int(max_depth), 0)
-    resolved_instructions = instructions.strip() or state_string(
-        tool_context.state, MobileContextKey.INSTRUCTIONS
-    )
     tool_context.state[MobileContextKey.MAX_STEPS] = resolved_max_steps
     tool_context.state[MobileContextKey.MAX_ACTIVITIES] = resolved_max_activities
     tool_context.state[MobileContextKey.MAX_DEPTH] = resolved_max_depth
-    tool_context.state[MobileContextKey.INSTRUCTIONS] = resolved_instructions
 
     await MOBILE_SESSION.connect(capability_id, app_package=app_package, app_activity=app_activity)
     page_source = await MOBILE_SESSION.get_accessibility_tree()
@@ -77,7 +69,6 @@ async def run_mobile_test(
         raise RuntimeError(f"Empty UI tree from device {serial}, session may not be ready")
 
     try:
-        guided_path = await run_guided_navigation(resolved_instructions, resolved_max_steps)
         report_id = f"{generate_run_timestamp()}_{report_label(app_package)}"
         navigator = MobileScreenScannerTool(
             {
@@ -95,7 +86,6 @@ async def run_mobile_test(
             MAX_CONCURRENT_STATIC_ANALYSES,
         )
         navigator_data["report_id"] = report_id
-        navigator_data["path"] = [*guided_path, *navigator_data.get("path", [])]
         save_source_reports(
             REPORTS_ROOT / report_id / "static_reports",
             static_analysis.deterministic_report,

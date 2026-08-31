@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from common import MobileContextKey
-from mobile_tools.guided_navigator import MobileGuidedNavigatorTool
 from mobile_tools.screen_scanner import MobileScanSnapshot
 from mobile_tools.utils.queue_utils import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
 from mobile_tools.utils.report_utils import deterministic_report
@@ -73,16 +72,6 @@ class MobileStaticAnalyzer:
             "llm_report": llm_result.llm_report,
             "debug_data": debug_data,
         }
-
-
-async def run_guided_navigation(instructions: str, max_steps: int) -> list[str]:
-    """Run optional guided navigation and return its recorded path."""
-    if not instructions:
-        return []
-    result = await MobileGuidedNavigatorTool({"instructions": instructions, "max_steps": max_steps}).execute()
-    if not result.is_success():
-        raise RuntimeError(result.error or "Mobile guided navigation failed.")
-    return result.data.get("path", []) if isinstance(result.data, dict) else []
 
 
 async def run_mobile_pipeline(

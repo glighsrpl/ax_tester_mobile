@@ -3,7 +3,6 @@ from typing import Any
 from google.adk.tools.tool_context import ToolContext
 
 from common import MobileContextKey
-from mobile_tools.guided_navigator import MobileGuidedNavigatorTool
 from mobile_tools.screen_scanner import MobileScreenScannerTool
 from tools.base import ToolResult
 
@@ -61,39 +60,5 @@ async def run_mobile_screen_scan(tool_context: ToolContext) -> dict[str, Any]:
     max_activities = _state_int(tool_context, MobileContextKey.MAX_ACTIVITIES, 10)
     max_depth = _state_int(tool_context, MobileContextKey.MAX_DEPTH, 5)
     data = await _scan(app_package, max_steps, max_activities, max_depth)
-    tool_context.state[MobileContextKey.NAVIGATOR_DATA] = data
-    return {"status": "success", "activities": _activity_count(data)}
-
-
-async def run_mobile_guided_navigation(
-    tool_context: ToolContext,
-    instructions: str = "",
-) -> dict[str, Any]:
-    """
-    Run a mobile guided navigation using the MobileGuidedNavigatorTool and return the navigation results.
-
-    Attributes:
-        tool_context (ToolContext): The context containing the state and configuration for the tool execution.
-            app_package (str): The package name of the target mobile application to navigate.
-            max_steps (int): The maximum number of steps to perform during the navigation.
-            instructions (str): The navigation instructions to guide the navigation process.
-    """
-    app_package = _state_str(tool_context, MobileContextKey.APP_PACKAGE)
-    max_steps = _state_int(tool_context, MobileContextKey.MAX_STEPS, 10)
-    max_activities = _state_int(tool_context, MobileContextKey.MAX_ACTIVITIES, 10)
-    max_depth = _state_int(tool_context, MobileContextKey.MAX_DEPTH, 5)
-    text = instructions.strip() or _state_str(tool_context, MobileContextKey.INSTRUCTIONS)
-    raw_result: ToolResult = await MobileGuidedNavigatorTool(
-        {
-            "instructions": text,
-            "max_steps": max_steps,
-        }
-    ).execute()
-    if not raw_result.is_success():
-        raise RuntimeError(raw_result.error or "Mobile guided navigation failed.")
-
-    data = await _scan(app_package, max_steps, max_activities, max_depth)
-    guided_path = raw_result.data.get("path", []) if isinstance(raw_result.data, dict) else []
-    data["path"] = [*guided_path, *data.get("path", [])]
     tool_context.state[MobileContextKey.NAVIGATOR_DATA] = data
     return {"status": "success", "activities": _activity_count(data)}
