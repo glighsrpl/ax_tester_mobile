@@ -84,7 +84,7 @@ def get_cross_screen_instruction(tool_context: ToolContext) -> str:
         - Deduplicate: one issue per distinct inconsistency, state affected screen count.
         - Reference every affected screen_id and activity_name in html_snippet.
         - Put element index, bounds, class, activity, and snapshot_id in html_snippet.
-        - Use: source="llm", tool_name="cross_screen_agent",
+        - Use: source="llm/cross_screen_agent", tool_name="cross_screen_agent",
           page="mobile://{app_package}/{activity}".
         - No image path.
         - Return only the Report schema with total_issues equal to issue_list length.
