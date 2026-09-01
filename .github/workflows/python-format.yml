@@ -23,7 +23,7 @@ jobs:
           pip install ruff
 
       - name: Check formatting
-        run: ruff format --check src agent.py
+        run: ruff format --check src mobile_agent.py
 
       - name: Check lint
-        run: ruff check src agent.py
+        run: ruff check src mobile_agent.py
