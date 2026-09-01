@@ -9,8 +9,12 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types
 
 from common import MobileContextKey
-from mobile_agents.static_agent import mobile_merge_agent, mobile_static_analysis_agent
-from schemas import Issue, Report
+from mobile_agents.static_agent import (
+    mobile_merge_agent,
+    mobile_static_analysis_agent,
+    mobile_static_post_pass_agent,
+)
+from schemas import Report
 from tools.mobile_screen_scanner import MobileScanSnapshot
 from utils.contrast_calculator import calculate_contrast_measurements
 from utils.mobile_queue import SnapshotAnalysis
@@ -50,6 +54,8 @@ def empty_llm_reports(snapshot: MobileScanSnapshot) -> StaticSnapshotReports:
 def aggregate_source_reports(
     analyses: list[SnapshotAnalysis],
     screenshot_paths: object,
+    *,
+    page: str,
 ) -> tuple[Report, Report, Report]:
     """Prepare complete source reports with the screenshot of every finding."""
     total_snapshots = len(analyses)
@@ -77,26 +83,7 @@ def aggregate_source_reports(
         total_snapshots,
         "llm",
     )
-    return deterministic, contrast, llm
-
-
-def group_merged_issues_by_activity(
-    report: Report,
-    analyses: list[SnapshotAnalysis],
-    screenshot_paths: object,
-) -> dict[str, list[Issue]]:
-    """Group final findings by the activity that owns their screenshot."""
-    issues_by_activity = {analysis.activity.strip() or "unknown": [] for analysis in analyses}
-    paths = screenshot_paths if isinstance(screenshot_paths, Mapping) else {}
-    activity_by_screenshot = {
-        screenshot_path: analysis.activity.strip() or "unknown"
-        for analysis in analyses
-        if isinstance(screenshot_path := paths.get(analysis.snapshot_id), str) and screenshot_path
-    }
-    for issue in report.issue_list:
-        activity = activity_by_screenshot.get(issue.image_url_or_path, "unknown")
-        issues_by_activity.setdefault(activity, []).append(issue)
-    return issues_by_activity
+    return tuple(report.model_copy(update={"page": page}) for report in (deterministic, contrast, llm))
 
 
 async def run_static_snapshot(snapshot_payload: dict[str, object], platform: str) -> StaticSnapshotReports:
@@ -132,7 +119,31 @@ def serialize_snapshot(snapshot_payload: dict[str, object]) -> dict[str, object]
     return {key: value for key, value in snapshot_payload.items() if key != "screenshot"}
 
 
-async def run_mobile_merge(deterministic_report: Report, contrast_report: Report, llm_report: Report) -> Report:
+async def run_cross_screen_analysis(
+    screen_summaries: list[dict[str, object]],
+    app_package: str,
+    activity: str,
+) -> Report:
+    """Run the Static Agent's one-time cross-screen post-pass."""
+    runner = InMemoryRunner(agent=mobile_static_post_pass_agent, app_name="mobile_static_cross_screen")
+    session_id = await _run_agent(
+        runner,
+        {
+            str(MobileContextKey.CROSS_SCREEN_REPORT): screen_summaries,
+            str(MobileContextKey.APP_PACKAGE): app_package,
+            str(MobileContextKey.APP_ACTIVITY): activity,
+        },
+        types.Content(role="user", parts=[types.Part(text="Run the cross-screen static analysis now.")]),
+    )
+    report = await _state_report_for_key(runner, session_id, MobileContextKey.CROSS_SCREEN_REPORT)
+    return report.model_copy(update={"page": mobile_page(app_package, activity)})
+
+
+async def run_mobile_merge(
+    deterministic_report: Report,
+    contrast_report: Report,
+    llm_report: Report,
+) -> Report:
     runner = InMemoryRunner(agent=mobile_merge_agent, app_name="mobile_static_merge")
     session_id = await _run_agent(
         runner,
@@ -198,17 +209,20 @@ async def _snapshot_reports(runner: InMemoryRunner, session_id: str) -> StaticSn
 
 
 async def _static_results(runner: InMemoryRunner, session_id: str) -> Report:
+    return await _state_report_for_key(runner, session_id, MobileContextKey.STATIC_RESULTS)
+
+
+async def _state_report_for_key(
+    runner: InMemoryRunner,
+    session_id: str,
+    key: MobileContextKey,
+) -> Report:
     session = await runner.session_service.get_session(
         app_name=runner.app_name,
         user_id="mobile_user",
         session_id=session_id,
     )
-    result = (
-        session.state.get(MobileContextKey.STATIC_RESULTS)
-        or session.state.get(str(MobileContextKey.STATIC_RESULTS))
-        if session
-        else None
-    )
+    result = session.state.get(key) or session.state.get(str(key)) if session else None
     return _report_from_value(result)
 
 
@@ -238,3 +252,13 @@ def _aggregate_source_report(reports: list[Report], total_snapshots: int, tool_n
     """Combine reports without deduplicating findings before the merge agent."""
     report_buckets = {str(index): report.issue_list for index, report in enumerate(reports)}
     return merge_static_reports(reports, total_snapshots, report_buckets, tool_name)
+
+
+def append_cross_screen_issues(merge_report: Report, cross_screen_report: Report) -> Report:
+    """Create the final report by appending cross-screen findings without deduplication."""
+    issues = [*merge_report.issue_list, *cross_screen_report.issue_list]
+    return merge_report.model_copy(update={"issue_list": issues, "total_issues": len(issues)})
+
+
+def mobile_page(app_package: str, activity: str) -> str:
+    return f"mobile://{app_package}/{activity}"
