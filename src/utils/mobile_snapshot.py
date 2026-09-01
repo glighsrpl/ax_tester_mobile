@@ -43,9 +43,7 @@ def build_cross_screen_summary(snapshot: MobileScanSnapshot) -> dict[str, object
         "screen_id": snapshot.snapshot_id,
         "activity_name": snapshot.activity.strip() or "unknown",
         "nav_elements": [
-            _cross_screen_element(element)
-            for element in elements
-            if _is_navigation_element(element)
+            _cross_screen_element(element) for element in elements if _is_navigation_element(element)
         ],
         "headings": [
             {"level": None, "text": _element_label(element)}
@@ -53,9 +51,7 @@ def build_cross_screen_summary(snapshot: MobileScanSnapshot) -> dict[str, object
             if _is_heading(element) and _element_label(element)
         ],
         "focusable_order": [
-            _cross_screen_element(element)
-            for element in elements
-            if element.focusable or element.clickable
+            _cross_screen_element(element) for element in elements if element.focusable or element.clickable
         ],
         "labels_map": {
             _element_identifier(element): element.content_desc.strip()

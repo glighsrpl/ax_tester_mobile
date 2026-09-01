@@ -234,12 +234,7 @@ async def _state_report_for_key(
         user_id="mobile_user",
         session_id=session_id,
     )
-    result = (
-        session.state.get(key)
-        or session.state.get(str(key))
-        if session
-        else None
-    )
+    result = session.state.get(key) or session.state.get(str(key)) if session else None
     return _report_from_value(result)
 
 

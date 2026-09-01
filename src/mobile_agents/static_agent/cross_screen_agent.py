@@ -10,7 +10,6 @@ from google.adk.tools.tool_context import ToolContext
 from common import MODEL, MobileContextKey
 from schemas import Report
 
-
 CROSS_SCREEN_RULES = (
     "1.3.1 - Info and Relationships (Level A)",
     "1.3.2 - Meaningful Sequence (Level A)",
