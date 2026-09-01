@@ -9,7 +9,7 @@ from google.adk.tools.tool_context import ToolContext
 from common import MODEL, MobileContextKey
 from mobile_agents.static_agent.contrast_agent import contrast_agent
 from mobile_agents.static_agent.cross_screen_agent import cross_screen_agent
-from mobile_agents.static_agent.init_agent import init_agent
+from mobile_agents.static_agent.loop_agent import mobile_loop_agent
 from schemas import Report
 
 
@@ -75,7 +75,7 @@ def _state_report(tool_context: ToolContext, key: MobileContextKey) -> dict[str,
 mobile_static_analysis_agent = SequentialAgent(
     name="MobileStaticAnalysisAgent",
     description="Run WCAG static analysis on mobile snapshots.",
-    sub_agents=[contrast_agent, init_agent],
+    sub_agents=[contrast_agent, mobile_loop_agent],
 )
 
 mobile_static_post_pass_agent = SequentialAgent(

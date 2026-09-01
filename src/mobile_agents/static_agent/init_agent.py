@@ -33,8 +33,9 @@ def get_mobile_static_instruction(tool_context: ToolContext) -> str:
             - Empty issue list is a valid and expected output.
 
         Return only the Report schema.
-        Use source "llm". Put element index, bounds, class, activity, and snapshot_id
-        in html_snippet because they are not separate fields in the Issue schema.
+        Use source "llm". Put element index, bounds, class, activity, snapshot_id, and
+        the xpath or resource-id when available in html_snippet because they are not
+        separate fields in the Issue schema.
         The tested platform is {platform}. Apply common fixes only as remediation
         guidance.
 
