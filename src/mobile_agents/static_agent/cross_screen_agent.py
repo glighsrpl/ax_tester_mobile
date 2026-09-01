@@ -106,7 +106,7 @@ def _screen_summaries(tool_context: ToolContext) -> list[dict[str, Any]]:
 
 
 cross_screen_agent = LlmAgent(
-    name="cross_screen_agent",
+    name="MobileCrossScreenAgent",
     model=MODEL,
     description="Find WCAG violations that are visible only across mobile screens.",
     instruction=get_cross_screen_instruction,

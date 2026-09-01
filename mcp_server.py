@@ -339,7 +339,7 @@ def _detect_mobile_platform(
 
 
 @mcp.tool(structured_output=False)
-async def get_report_file(report_id: str, file_type: ReportFileType) -> mcp_types.CallToolResult:
+async def get_mobile_report_file(report_id: str, file_type: ReportFileType) -> mcp_types.CallToolResult:
     """Retrieve a saved report file using explicit tool arguments.
 
     Parameters:
