@@ -1,4 +1,4 @@
-"""MCP server exposing mobile accessibility testing tools.
+"""MCP server exposing the ADK root agent for accessibility testing.
 
 Tools exposed:
 - run_full_mobile_test(...): run the mobile accessibility test flow.
@@ -8,25 +8,29 @@ Tools exposed:
 # ruff: noqa: E402
 
 import argparse
+import asyncio
 import base64
+import uuid
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
+from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
+from google.adk.utils.context_utils import Aclosing
+from google.genai import types as genai_types
 from mcp import types as mcp_types
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from common import MobileContextKey
-from tools.mobile_accessibility_service import (
-    MobileAccessibilityScanRequest,
-    MobileAccessibilityScanResult,
-    run_mobile_accessibility_scan,
-)
+from mobile_agent import mobile_root_agent
 from tools.mobile_saver_tool import run_save_mobile
 from utils.mobile_capabilities import discover_mobile_capabilities
+from utils.mobile_session import MOBILE_SESSION
 from utils.report_store import (
     build_report_manifest,
     get_report_file_metadata,
@@ -37,6 +41,7 @@ from utils.report_store import (
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
+USER_ID = "mcp_user"
 
 mcp = FastMCP(
     "MyServer",
@@ -44,6 +49,109 @@ mcp = FastMCP(
         enable_dns_rebinding_protection=False,
     ),
 )
+
+
+@dataclass
+class MobileAgentBridge:
+    """Run the ADK mobile root agent in an isolated MCP session."""
+
+    session_service: InMemorySessionService = field(default_factory=InMemorySessionService)
+    runner: Runner | None = None
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+
+    async def run_turn(self, state: dict[str, Any]) -> dict[str, Any]:
+        """Run one serialized ADK turn and return its resulting session state."""
+        async with self.lock:
+            try:
+                return await self._run_turn_locked(state)
+            finally:
+                await MOBILE_SESSION.disconnect()
+
+    async def _run_turn_locked(self, state: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_runner()
+        session_id = str(uuid.uuid4())
+        await self.session_service.create_session(
+            app_name="mobile_ax_tester_mcp",
+            user_id=USER_ID,
+            session_id=session_id,
+            state=state,
+        )
+        content = _mobile_test_request(state)
+        events: list[Any] = []
+        assert self.runner is not None
+        async with Aclosing(
+            self.runner.run_async(user_id=USER_ID, session_id=session_id, new_message=content)
+        ) as event_stream:
+            async for event in event_stream:
+                events.append(event)
+
+        return self._build_result(session_id, events, await self._load_state(session_id))
+
+    def _ensure_runner(self) -> None:
+        if self.runner is None:
+            self.runner = Runner(
+                app_name="mobile_ax_tester_mcp",
+                agent=mobile_root_agent,
+                session_service=self.session_service,
+            )
+
+    def _build_result(
+        self,
+        session_id: str,
+        events: list[Any],
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
+        messages: list[dict[str, str]] = []
+        function_calls: list[dict[str, Any]] = []
+        final_response = ""
+        for event in events:
+            if event.content and event.content.parts:
+                message = "".join(part.text or "" for part in event.content.parts)
+                if message.strip():
+                    messages.append({"author": event.author or "unknown", "text": message})
+                    if (event.author or "").lower() != "user":
+                        final_response = message
+            function_calls.extend(
+                {"name": function_call.name, "args": function_call.args}
+                for function_call in event.get_function_calls() or []
+            )
+        return {
+            "status": "ok",
+            "session_id": session_id,
+            "final_response": final_response,
+            "messages": messages,
+            "function_calls": function_calls,
+            "state": state,
+        }
+
+    async def _load_state(self, session_id: str) -> dict[str, Any]:
+        session = await self.session_service.get_session(
+            app_name="mobile_ax_tester_mcp",
+            user_id=USER_ID,
+            session_id=session_id,
+        )
+        return dict(session.state) if session else {}
+
+
+def _mobile_test_request(state: dict[str, Any]) -> genai_types.Content:
+    max_steps = state.get(str(MobileContextKey.MAX_STEPS), 50)
+    max_activities = state.get(str(MobileContextKey.MAX_ACTIVITIES), 3)
+    max_depth = state.get(str(MobileContextKey.MAX_DEPTH), 5)
+    return genai_types.Content(
+        role="user",
+        parts=[
+            genai_types.Part(
+                text=(
+                    "Run the mobile accessibility test now. "
+                    f"Call run_mobile_test with max_steps={max_steps}, "
+                    f"max_activities={max_activities}, max_depth={max_depth}."
+                )
+            )
+        ],
+    )
+
+
+mobile_bridge = MobileAgentBridge()
 
 
 def _text_content_mcp(text: str) -> mcp_types.TextContent:
@@ -93,14 +201,15 @@ def _report_embedded_content(
     ], metadata
 
 
-def _build_mobile_scan_result(result: dict[str, Any]) -> mcp_types.CallToolResult:
-    report_artifact = result.get("report_artifact")
+def _build_mobile_scan_result(bridge_result: dict[str, Any]) -> mcp_types.CallToolResult:
+    report_artifact = bridge_result.get("report_artifact")
     if not isinstance(report_artifact, dict) or not report_artifact.get("report_id"):
         return _error_result(
             "The accessibility test completed without a saved report artifact.",
             {
-                "current_url": result.get("current_url"),
-                "final_response": result.get("final_response", ""),
+                "session_id": bridge_result.get("session_id"),
+                "current_url": bridge_result.get("current_url"),
+                "final_response": bridge_result.get("final_response", ""),
             },
         )
 
@@ -117,7 +226,8 @@ def _build_mobile_scan_result(result: dict[str, Any]) -> mcp_types.CallToolResul
         return _error_result(
             f"The test saved report_id {report_id}, but the JSON report could not be loaded: {exc}",
             {
-                "current_url": result.get("current_url"),
+                "session_id": bridge_result.get("session_id"),
+                "current_url": bridge_result.get("current_url"),
                 "report_id": report_id,
                 "report_artifact": report_artifact,
             },
@@ -126,10 +236,12 @@ def _build_mobile_scan_result(result: dict[str, Any]) -> mcp_types.CallToolResul
     return mcp_types.CallToolResult(
         content=content,
         structuredContent={
-            "status": result.get("status", "ok"),
-            "current_url": result.get("current_url"),
-            "final_response": result.get("final_response", ""),
-            "activities": result.get("activities", 0),
+            "status": bridge_result.get("status", "ok"),
+            "session_id": bridge_result.get("session_id"),
+            "current_url": bridge_result.get("current_url"),
+            "final_response": bridge_result.get("final_response", ""),
+            "messages": bridge_result.get("messages", []),
+            "function_calls": bridge_result.get("function_calls", []),
             "report_id": report_id,
             "available_file_types": report_artifact.get("available_file_types", []),
             "files": report_artifact.get("files", []),
@@ -189,47 +301,22 @@ async def run_full_mobile_test(
 
     try:
         platform = _detect_mobile_platform(capabilities, capability_id)
-        request = MobileAccessibilityScanRequest(
-            app_package=app_package,
-            app_activity=app_activity,
-            capability_id=capability_id,
-            platform=platform,
-            max_steps=max_steps,
-            max_activities=max_activities,
-            max_depth=max_depth,
+        bridge_result = await mobile_bridge.run_turn(
+            {
+                str(MobileContextKey.APP_PACKAGE): app_package,
+                str(MobileContextKey.APP_ACTIVITY): app_activity,
+                str(MobileContextKey.CAPABILITY_ID): capability_id,
+                str(MobileContextKey.PLATFORM): platform,
+                str(MobileContextKey.MAX_STEPS): max_steps,
+                str(MobileContextKey.MAX_ACTIVITIES): max_activities,
+                str(MobileContextKey.MAX_DEPTH): max_depth,
+            }
         )
-        scan_result = await run_mobile_accessibility_scan(request)
-        result = _mcp_scan_result(request, scan_result)
-        result["report_artifact"] = run_save_mobile(_scan_state(request, scan_result))
-        return _build_mobile_scan_result(result)
+        bridge_result["report_artifact"] = run_save_mobile(bridge_result.get("state", {}))
+        bridge_result["current_url"] = f"mobile://{app_package}/{app_activity}"
+        return _build_mobile_scan_result(bridge_result)
     except Exception as exc:
         return _error_result(str(exc), {"capability_id": capability_id})
-
-
-def _mcp_scan_result(
-    request: MobileAccessibilityScanRequest,
-    scan_result: MobileAccessibilityScanResult,
-) -> dict[str, object]:
-    return {
-        "status": "success",
-        "activities": scan_result.activities,
-        "current_url": f"mobile://{request.app_package}/{request.app_activity}",
-        "final_response": "Mobile navigation and static analysis completed.",
-    }
-
-
-def _scan_state(
-    request: MobileAccessibilityScanRequest,
-    scan_result: MobileAccessibilityScanResult,
-) -> dict[MobileContextKey, object]:
-    return {
-        MobileContextKey.APP_PACKAGE: request.app_package,
-        MobileContextKey.APP_ACTIVITY: request.app_activity,
-        MobileContextKey.CAPABILITY_ID: request.capability_id,
-        MobileContextKey.NAVIGATOR_DATA: scan_result.navigator_data,
-        MobileContextKey.STATIC_RESULTS: scan_result.static_results,
-        MobileContextKey.STATIC_DEBUG_DATA: scan_result.static_debug_data,
-    }
 
 
 def _detect_mobile_platform(
