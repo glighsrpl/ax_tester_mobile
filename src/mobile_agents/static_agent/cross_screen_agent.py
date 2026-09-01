@@ -23,6 +23,8 @@ CROSS_SCREEN_RULES = (
 def get_cross_screen_instruction(tool_context: ToolContext) -> str:
     """Build the post-pass prompt from compact screen summaries only."""
     summaries = _screen_summaries(tool_context)
+    app_package = _state_text(tool_context, MobileContextKey.APP_PACKAGE)
+    activity = _state_text(tool_context, MobileContextKey.APP_ACTIVITY)
     return f"""
         You are a cross-screen accessibility auditor for mobile applications.
         You receive accumulated per-screen summaries and must evaluate ONLY cross-screen
@@ -37,8 +39,7 @@ def get_cross_screen_instruction(tool_context: ToolContext) -> str:
         report nothing.
 
         ## COMPARABILITY
-        Two screens are comparable when they share the same activity_name OR contain
-        the same recurring component pattern (e.g., same toolbar, same list structure).
+        All summaries belong to the same activity. Compare only the supplied screens.
         Minimum 2 comparable screens required to flag any issue.
 
         ## RULES
@@ -83,7 +84,8 @@ def get_cross_screen_instruction(tool_context: ToolContext) -> str:
         - Deduplicate: one issue per distinct inconsistency, state affected screen count.
         - Reference every affected screen_id and activity_name in html_snippet.
         - Put element index, bounds, class, activity, and snapshot_id in html_snippet.
-        - Use: source="llm/cross_screen_agent", tool_name="cross_screen_agent", page="mobile".
+        - Use: source="llm", tool_name="cross_screen_agent",
+          page="mobile://{app_package}/{activity}".
         - No image path.
         - Return only the Report schema with total_issues equal to issue_list length.
         - If no cross-screen violations found, return empty issue_list with total_issues=0.
@@ -102,6 +104,10 @@ def _screen_summaries(tool_context: ToolContext) -> list[dict[str, Any]]:
     if not isinstance(summaries, list):
         return []
     return [dict(summary) for summary in summaries if isinstance(summary, Mapping)]
+
+
+def _state_text(tool_context: ToolContext, key: MobileContextKey) -> str:
+    return str(tool_context.state.get(key) or tool_context.state.get(str(key)) or "unknown").strip()
 
 
 cross_screen_agent = LlmAgent(

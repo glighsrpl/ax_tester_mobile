@@ -9,7 +9,7 @@ from typing import Protocol
 from schemas import Issue, Report
 from tools.mobile_screen_scanner import MobileScanSnapshot
 from utils.mobile_queue import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
-from utils.mobile_report import deterministic_report
+from utils.mobile_report import deterministic_report, merge_static_reports
 from utils.mobile_snapshot import (
     build_cross_screen_summary,
     build_static_debug_payload,
@@ -19,7 +19,7 @@ from utils.mobile_static_analysis import (
     aggregate_source_reports,
     append_cross_screen_issues,
     empty_llm_reports,
-    group_merged_issues_by_activity,
+    mobile_page,
     run_cross_screen_analysis,
     run_mobile_merge,
     run_static_snapshot,
@@ -33,13 +33,20 @@ class StaticAnalysisResult:
     """Aggregated reports and debug payloads for a mobile scan."""
 
     report: Report
-    merge_report: Report
-    deterministic_report: Report
-    contrast_report: Report
-    llm_report: Report
-    cross_screen_report: Report
+    activity_reports: dict[str, "ActivityReports"]
     issues_by_activity: dict[str, list[Issue]]
     debug_data: list[dict[str, object]]
+
+
+@dataclass(frozen=True)
+class ActivityReports:
+    """Reports produced for one activity actually visited by the navigator."""
+
+    deterministic: Report
+    contrast: Report
+    llm: Report
+    merge: Report
+    cross_screen: Report
 
 
 class SnapshotNavigator(Protocol):
@@ -123,28 +130,59 @@ async def aggregate_static_analyses(
     analyses: list[SnapshotAnalysis],
     navigator_data: Mapping[str, object],
 ) -> StaticAnalysisResult:
-    """Send all source findings to the merge agent and retain activity buckets."""
-    deterministic, contrast, llm = aggregate_source_reports(analyses, navigator_data.get("snapshot_screenshots"))
-    cross_screen = await run_cross_screen_analysis(
-        [analysis.cross_screen_summary for analysis in analyses],
-    )
-    merge_report = await run_mobile_merge(deterministic, contrast, llm)
-    report = append_cross_screen_issues(merge_report, cross_screen)
-    activity_issues = group_merged_issues_by_activity(
-        report,
-        analyses,
-        navigator_data.get("snapshot_screenshots"),
+    """Create source, merged, and cross-screen reports independently per activity."""
+    app_package = str(navigator_data.get("app_package") or "unknown")
+    activity_reports = {
+        activity: await _activity_reports(activity, activity_analyses, navigator_data, app_package)
+        for activity, activity_analyses in _analyses_by_activity(analyses).items()
+    }
+    activity_issues = {
+        activity: [*reports.merge.issue_list, *reports.cross_screen.issue_list]
+        for activity, reports in activity_reports.items()
+    }
+    report = merge_static_reports(
+        [
+            append_cross_screen_issues(reports.merge, reports.cross_screen)
+            for reports in activity_reports.values()
+        ],
+        len(analyses),
+        activity_issues,
+        "static",
     )
     return StaticAnalysisResult(
         report=report,
-        merge_report=merge_report,
-        deterministic_report=deterministic,
-        contrast_report=contrast,
-        llm_report=llm,
-        cross_screen_report=cross_screen,
+        activity_reports=activity_reports,
         issues_by_activity=activity_issues,
         debug_data=[analysis.debug_data for analysis in analyses],
     )
+
+
+def _analyses_by_activity(analyses: list[SnapshotAnalysis]) -> dict[str, list[SnapshotAnalysis]]:
+    grouped: dict[str, list[SnapshotAnalysis]] = {}
+    for analysis in analyses:
+        grouped.setdefault(analysis.activity.strip() or "unknown", []).append(analysis)
+    return grouped
+
+
+async def _activity_reports(
+    activity: str,
+    analyses: list[SnapshotAnalysis],
+    navigator_data: Mapping[str, object],
+    app_package: str,
+) -> ActivityReports:
+    page = mobile_page(app_package, activity)
+    deterministic, contrast, llm = aggregate_source_reports(
+        analyses,
+        navigator_data.get("snapshot_screenshots"),
+        page=page,
+    )
+    cross_screen = await run_cross_screen_analysis(
+        [analysis.cross_screen_summary for analysis in analyses],
+        app_package,
+        activity,
+    )
+    merge = (await run_mobile_merge(deterministic, contrast, llm)).model_copy(update={"page": page})
+    return ActivityReports(deterministic, contrast, llm, merge, cross_screen)
 
 
 async def _deterministic_snapshot_report(snapshot: MobileScanSnapshot) -> Report:

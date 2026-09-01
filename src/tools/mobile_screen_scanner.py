@@ -49,6 +49,7 @@ class MobileScreenNavigationResult:
     visited_activities: tuple[str, ...]
     path: tuple[str, ...]
     steps: int
+    app_package: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         """Serialize the result for existing state and report consumers."""
@@ -59,6 +60,16 @@ class MobileScreenNavigationResult:
             "visited_activities": list(self.visited_activities),
             "path": list(self.path),
             "steps": self.steps,
+            "app_package": self.app_package,
+            "screen_context": [
+                {
+                    "snapshot_id": snapshot.snapshot_id,
+                    "activity_name": snapshot.activity,
+                    "screenshot_path": self.snapshot_screenshots.get(snapshot.snapshot_id),
+                    "tree_path": snapshot.tree_path,
+                }
+                for snapshot in self.snapshots
+            ],
             "snapshots": [asdict(snapshot) for snapshot in self.snapshots],
         }
 
@@ -665,6 +676,7 @@ class MobileScreenNavigator:
             visited_activities=tuple(self._visited_activities),
             path=tuple(self._path),
             steps=self._step,
+            app_package=str(self.target_app_package) if self.target_app_package else None,
         ).as_dict()
 
     def _persist_screenshot(

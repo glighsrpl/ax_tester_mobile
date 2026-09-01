@@ -1,10 +1,13 @@
 """Deterministic MCP service for touch-based mobile accessibility scans."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
 from tools.mobile_saver_tool import generate_run_timestamp
 from tools.mobile_screen_scanner import MobileScreenNavigator
 from utils.mobile_pipeline import (
+    ActivityReports,
     MobileStaticAnalyzer,
     run_mobile_pipeline,
 )
@@ -97,17 +100,7 @@ async def _collect_and_analyze(
         MAX_CONCURRENT_STATIC_ANALYSES,
     )
     navigator_data["report_id"] = report_id
-    cross_screen_report = static_analysis.cross_screen_report.model_copy(
-        update={"page": _mobile_page(request.app_package, request.app_activity)},
-    )
-    save_source_reports(
-        REPORTS_ROOT / report_id / "static_reports",
-        static_analysis.deterministic_report,
-        static_analysis.contrast_report,
-        static_analysis.llm_report,
-        cross_screen=cross_screen_report,
-        merge=static_analysis.merge_report,
-    )
+    _save_activity_reports(REPORTS_ROOT / report_id / "static_reports", static_analysis.activity_reports)
     static_results = static_analysis.report.model_dump(mode="json")
     static_results["issues_by_activity"] = {
         activity: [issue.model_dump(mode="json") for issue in issues]
@@ -127,8 +120,21 @@ def _activity_count(data: dict[str, object]) -> int:
     return len(activities) if isinstance(activities, list) else 0
 
 
-def _mobile_page(app_package: str, app_activity: str) -> str:
-    return f"mobile://{app_package}/{app_activity}"
+def _save_activity_reports(
+    report_dir: Path,
+    activity_reports: Mapping[str, ActivityReports],
+) -> None:
+    multiple_activities = len(activity_reports) > 1
+    for activity, reports in activity_reports.items():
+        directory = report_dir / _report_label(activity) if multiple_activities else report_dir
+        save_source_reports(
+            directory,
+            reports.deterministic,
+            reports.contrast,
+            reports.llm,
+            cross_screen=reports.cross_screen,
+            merge=reports.merge,
+        )
 
 
 def _report_label(value: str) -> str:
