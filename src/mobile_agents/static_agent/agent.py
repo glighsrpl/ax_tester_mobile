@@ -43,6 +43,7 @@ def get_mobile_merge_instruction(tool_context: ToolContext) -> str:
         7. Source values:
         - "deterministic_analyzer" — found only by deterministic analyzer
         - "llm/contrast_agent" — found only by contrast agent
+        - "llm/cross_screen_agent" — found only by cross-screen agent
         - "llm" — found only by LLM agent
         - "both" — found by ≥ 2 agents (merged)
 

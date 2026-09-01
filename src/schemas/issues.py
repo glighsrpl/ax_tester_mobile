@@ -8,6 +8,7 @@ SourceType = Literal[
     "both",
     "deterministic_analyzer",
     "llm/contrast_agent",
+    "llm/cross_screen_agent"
 ]
 ConfidenceLevel = Literal["high", "medium", "low"]
 WcagRule = Literal[
