@@ -1,6 +1,6 @@
-from utils.tree_sanitizer import detect_framework, sanitize_tree, xml_tree_to_dict
 from tools.base import MobileElementInfo
 from tools.mobile_screen_scanner import MobileScanSnapshot
+from utils.tree_sanitizer import detect_framework, sanitize_tree, xml_tree_to_dict
 
 MAX_STATIC_ELEMENTS = 120
 MAX_TEXT_CHARS = 160
