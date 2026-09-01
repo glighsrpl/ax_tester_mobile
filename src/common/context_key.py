@@ -20,6 +20,7 @@ class MobileContextKey(StrEnum):
     DETERMINISTIC_REPORT = "mobile_deterministic_report"
     CONTRAST_REPORT = "mobile_contrast_report"
     LLM_REPORT = "mobile_llm_report"
+    LOOP_REPORT = "mobile_loop_report"
     CROSS_SCREEN_REPORT = "mobile_cross_screen_report"
 
     # saved artifacts
