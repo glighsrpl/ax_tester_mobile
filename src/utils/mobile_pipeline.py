@@ -10,11 +10,16 @@ from schemas import Issue, Report
 from tools.mobile_screen_scanner import MobileScanSnapshot
 from utils.mobile_queue import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
 from utils.mobile_report import deterministic_report
-from utils.mobile_snapshot import build_static_debug_payload, build_static_snapshot_payload
+from utils.mobile_snapshot import (
+    build_cross_screen_summary,
+    build_static_debug_payload,
+    build_static_snapshot_payload,
+)
 from utils.mobile_static_analysis import (
     aggregate_source_reports,
     empty_llm_reports,
     group_merged_issues_by_activity,
+    run_cross_screen_analysis,
     run_mobile_merge,
     run_static_snapshot,
 )
@@ -30,6 +35,7 @@ class StaticAnalysisResult:
     deterministic_report: Report
     contrast_report: Report
     llm_report: Report
+    cross_screen_report: Report
     issues_by_activity: dict[str, list[Issue]]
     debug_data: list[dict[str, object]]
 
@@ -70,6 +76,7 @@ class MobileStaticAnalyzer:
             "contrast_report": llm_result.contrast_report,
             "llm_report": llm_result.llm_report,
             "debug_data": debug_data,
+            "cross_screen_summary": build_cross_screen_summary(snapshot),
         }
 
 
@@ -116,7 +123,10 @@ async def aggregate_static_analyses(
 ) -> StaticAnalysisResult:
     """Send all source findings to the merge agent and retain activity buckets."""
     deterministic, contrast, llm = aggregate_source_reports(analyses, navigator_data.get("snapshot_screenshots"))
-    report = await run_mobile_merge(deterministic, contrast, llm)
+    cross_screen = await run_cross_screen_analysis(
+        [analysis.cross_screen_summary for analysis in analyses],
+    )
+    report = await run_mobile_merge(deterministic, contrast, llm, cross_screen)
     activity_issues = group_merged_issues_by_activity(
         report,
         analyses,
@@ -127,6 +137,7 @@ async def aggregate_static_analyses(
         deterministic_report=deterministic,
         contrast_report=contrast,
         llm_report=llm,
+        cross_screen_report=cross_screen,
         issues_by_activity=activity_issues,
         debug_data=[analysis.debug_data for analysis in analyses],
     )

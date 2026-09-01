@@ -9,7 +9,11 @@ from google.adk.runners import InMemoryRunner
 from google.genai import types
 
 from common import MobileContextKey
-from mobile_agents.static_agent import mobile_merge_agent, mobile_static_analysis_agent
+from mobile_agents.static_agent import (
+    mobile_merge_agent,
+    mobile_static_analysis_agent,
+    mobile_static_post_pass_agent,
+)
 from schemas import Issue, Report
 from tools.mobile_screen_scanner import MobileScanSnapshot
 from utils.contrast_calculator import calculate_contrast_measurements
@@ -132,7 +136,23 @@ def serialize_snapshot(snapshot_payload: dict[str, object]) -> dict[str, object]
     return {key: value for key, value in snapshot_payload.items() if key != "screenshot"}
 
 
-async def run_mobile_merge(deterministic_report: Report, contrast_report: Report, llm_report: Report) -> Report:
+async def run_cross_screen_analysis(screen_summaries: list[dict[str, object]]) -> Report:
+    """Run the Static Agent's one-time cross-screen post-pass."""
+    runner = InMemoryRunner(agent=mobile_static_post_pass_agent, app_name="mobile_static_cross_screen")
+    session_id = await _run_agent(
+        runner,
+        {str(MobileContextKey.CROSS_SCREEN_REPORT): screen_summaries},
+        types.Content(role="user", parts=[types.Part(text="Run the cross-screen static analysis now.")]),
+    )
+    return await _state_report_for_key(runner, session_id, MobileContextKey.CROSS_SCREEN_REPORT)
+
+
+async def run_mobile_merge(
+    deterministic_report: Report,
+    contrast_report: Report,
+    llm_report: Report,
+    cross_screen_report: Report | None = None,
+) -> Report:
     runner = InMemoryRunner(agent=mobile_merge_agent, app_name="mobile_static_merge")
     session_id = await _run_agent(
         runner,
@@ -140,6 +160,9 @@ async def run_mobile_merge(deterministic_report: Report, contrast_report: Report
             str(MobileContextKey.DETERMINISTIC_REPORT): deterministic_report.model_dump(mode="json"),
             str(MobileContextKey.CONTRAST_REPORT): contrast_report.model_dump(mode="json"),
             str(MobileContextKey.LLM_REPORT): llm_report.model_dump(mode="json"),
+            str(MobileContextKey.CROSS_SCREEN_REPORT): (
+                cross_screen_report or _empty_cross_screen_report()
+            ).model_dump(mode="json"),
         },
         types.Content(role="user", parts=[types.Part(text="Merge the mobile accessibility reports now.")]),
     )
@@ -198,18 +221,30 @@ async def _snapshot_reports(runner: InMemoryRunner, session_id: str) -> StaticSn
 
 
 async def _static_results(runner: InMemoryRunner, session_id: str) -> Report:
+    return await _state_report_for_key(runner, session_id, MobileContextKey.STATIC_RESULTS)
+
+
+async def _state_report_for_key(
+    runner: InMemoryRunner,
+    session_id: str,
+    key: MobileContextKey,
+) -> Report:
     session = await runner.session_service.get_session(
         app_name=runner.app_name,
         user_id="mobile_user",
         session_id=session_id,
     )
     result = (
-        session.state.get(MobileContextKey.STATIC_RESULTS)
-        or session.state.get(str(MobileContextKey.STATIC_RESULTS))
+        session.state.get(key)
+        or session.state.get(str(key))
         if session
         else None
     )
     return _report_from_value(result)
+
+
+def _empty_cross_screen_report() -> Report:
+    return Report(tool_name="cross_screen_agent", total_issues=0, page="mobile://cross-screen", issue_list=[])
 
 
 def _state_report(state: object, key: MobileContextKey) -> Report:

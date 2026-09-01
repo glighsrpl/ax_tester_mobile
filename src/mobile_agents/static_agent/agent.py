@@ -8,6 +8,7 @@ from google.adk.tools.tool_context import ToolContext
 
 from common import MODEL, MobileContextKey
 from mobile_agents.static_agent.contrast_agent import contrast_agent
+from mobile_agents.static_agent.cross_screen_agent import cross_screen_agent
 from mobile_agents.static_agent.init_agent import init_agent
 from schemas import Report
 
@@ -17,6 +18,7 @@ def get_mobile_merge_instruction(tool_context: ToolContext) -> str:
     deterministic_report = _state_report(tool_context, MobileContextKey.DETERMINISTIC_REPORT)
     contrast_report = _state_report(tool_context, MobileContextKey.CONTRAST_REPORT)
     llm_report = _state_report(tool_context, MobileContextKey.LLM_REPORT)
+    cross_screen_report = _state_report(tool_context, MobileContextKey.CROSS_SCREEN_REPORT)
     return f"""
         Merge the following mobile accessibility reports into a single Report schema.
 
@@ -54,8 +56,11 @@ def get_mobile_merge_instruction(tool_context: ToolContext) -> str:
         Contrast report:
         {json.dumps(contrast_report, ensure_ascii=False)}
 
-        LLM report:
+        Per-screen LLM report:
         {json.dumps(llm_report, ensure_ascii=False)}
+
+        Cross-screen report:
+        {json.dumps(cross_screen_report, ensure_ascii=False)}
     """
 
 
@@ -75,6 +80,12 @@ mobile_static_analysis_agent = SequentialAgent(
     name="MobileStaticAnalysisAgent",
     description="Run WCAG static analysis on mobile snapshots.",
     sub_agents=[contrast_agent, init_agent],
+)
+
+mobile_static_post_pass_agent = SequentialAgent(
+    name="MobileStaticPostPassAgent",
+    description="Run static analysis checks that require multiple mobile screens.",
+    sub_agents=[cross_screen_agent],
 )
 
 mobile_merge_agent = LlmAgent(

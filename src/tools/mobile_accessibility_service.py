@@ -102,6 +102,7 @@ async def _collect_and_analyze(
         static_analysis.deterministic_report,
         static_analysis.contrast_report,
         static_analysis.llm_report,
+        static_analysis.cross_screen_report,
     )
     static_results = static_analysis.report.model_dump(mode="json")
     static_results["issues_by_activity"] = {

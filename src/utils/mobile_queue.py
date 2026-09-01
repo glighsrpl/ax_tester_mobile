@@ -18,6 +18,7 @@ class SnapshotAnalysis:
     contrast_report: Report
     llm_report: Report
     debug_data: dict[str, object]
+    cross_screen_summary: dict[str, object]
 
 
 class StaticAnalyzer(Protocol):
@@ -37,11 +38,13 @@ async def consume_static_snapshots(
             contrast = result.get("contrast_report")
             llm = result.get("llm_report")
             debug_data = result.get("debug_data")
+            cross_screen_summary = result.get("cross_screen_summary")
             if (
                 not isinstance(deterministic, Report)
                 or not isinstance(contrast, Report)
                 or not isinstance(llm, Report)
                 or not isinstance(debug_data, dict)
+                or not isinstance(cross_screen_summary, dict)
             ):
                 raise TypeError("Static snapshot analysis returned an invalid result.")
             analyses.append(
@@ -53,6 +56,7 @@ async def consume_static_snapshots(
                     contrast_report=contrast,
                     llm_report=llm,
                     debug_data=debug_data,
+                    cross_screen_summary=cross_screen_summary,
                 )
             )
         except Exception:
