@@ -23,7 +23,9 @@ def save_source_reports(
     deterministic: Report,
     contrast: Report,
     llm: Report,
+    *,
     cross_screen: Report | None = None,
+    merge: Report | None = None,
 ) -> None:
     report_dir.mkdir(parents=True, exist_ok=True)
     _write_report(report_dir / "deterministic.json", deterministic)
@@ -31,6 +33,8 @@ def save_source_reports(
     _write_report(report_dir / "llm.json", llm)
     if cross_screen is not None:
         _write_report(report_dir / "cross_screen_agent.json", cross_screen)
+    if merge is not None:
+        _write_report(report_dir / "merge_agent.json", merge)
 
 
 def merge_static_reports(

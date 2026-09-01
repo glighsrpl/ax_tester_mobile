@@ -97,12 +97,16 @@ async def _collect_and_analyze(
         MAX_CONCURRENT_STATIC_ANALYSES,
     )
     navigator_data["report_id"] = report_id
+    cross_screen_report = static_analysis.cross_screen_report.model_copy(
+        update={"page": _mobile_page(request.app_package, request.app_activity)},
+    )
     save_source_reports(
         REPORTS_ROOT / report_id / "static_reports",
         static_analysis.deterministic_report,
         static_analysis.contrast_report,
         static_analysis.llm_report,
-        static_analysis.cross_screen_report,
+        cross_screen=cross_screen_report,
+        merge=static_analysis.merge_report,
     )
     static_results = static_analysis.report.model_dump(mode="json")
     static_results["issues_by_activity"] = {
@@ -121,6 +125,10 @@ async def _collect_and_analyze(
 def _activity_count(data: dict[str, object]) -> int:
     activities = data.get("visited_activities")
     return len(activities) if isinstance(activities, list) else 0
+
+
+def _mobile_page(app_package: str, app_activity: str) -> str:
+    return f"mobile://{app_package}/{app_activity}"
 
 
 def _report_label(value: str) -> str:

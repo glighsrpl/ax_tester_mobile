@@ -17,6 +17,7 @@ from utils.mobile_snapshot import (
 )
 from utils.mobile_static_analysis import (
     aggregate_source_reports,
+    append_cross_screen_issues,
     empty_llm_reports,
     group_merged_issues_by_activity,
     run_cross_screen_analysis,
@@ -32,6 +33,7 @@ class StaticAnalysisResult:
     """Aggregated reports and debug payloads for a mobile scan."""
 
     report: Report
+    merge_report: Report
     deterministic_report: Report
     contrast_report: Report
     llm_report: Report
@@ -126,7 +128,8 @@ async def aggregate_static_analyses(
     cross_screen = await run_cross_screen_analysis(
         [analysis.cross_screen_summary for analysis in analyses],
     )
-    report = await run_mobile_merge(deterministic, contrast, llm, cross_screen)
+    merge_report = await run_mobile_merge(deterministic, contrast, llm)
+    report = append_cross_screen_issues(merge_report, cross_screen)
     activity_issues = group_merged_issues_by_activity(
         report,
         analyses,
@@ -134,6 +137,7 @@ async def aggregate_static_analyses(
     )
     return StaticAnalysisResult(
         report=report,
+        merge_report=merge_report,
         deterministic_report=deterministic,
         contrast_report=contrast,
         llm_report=llm,

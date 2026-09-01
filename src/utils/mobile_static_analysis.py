@@ -151,7 +151,6 @@ async def run_mobile_merge(
     deterministic_report: Report,
     contrast_report: Report,
     llm_report: Report,
-    cross_screen_report: Report | None = None,
 ) -> Report:
     runner = InMemoryRunner(agent=mobile_merge_agent, app_name="mobile_static_merge")
     session_id = await _run_agent(
@@ -160,9 +159,6 @@ async def run_mobile_merge(
             str(MobileContextKey.DETERMINISTIC_REPORT): deterministic_report.model_dump(mode="json"),
             str(MobileContextKey.CONTRAST_REPORT): contrast_report.model_dump(mode="json"),
             str(MobileContextKey.LLM_REPORT): llm_report.model_dump(mode="json"),
-            str(MobileContextKey.CROSS_SCREEN_REPORT): (
-                cross_screen_report or _empty_cross_screen_report()
-            ).model_dump(mode="json"),
         },
         types.Content(role="user", parts=[types.Part(text="Merge the mobile accessibility reports now.")]),
     )
@@ -238,10 +234,6 @@ async def _state_report_for_key(
     return _report_from_value(result)
 
 
-def _empty_cross_screen_report() -> Report:
-    return Report(tool_name="cross_screen_agent", total_issues=0, page="mobile://cross-screen", issue_list=[])
-
-
 def _state_report(state: object, key: MobileContextKey) -> Report:
     if not isinstance(state, Mapping):
         raise TypeError("Mobile static analysis state must be a dictionary.")
@@ -268,3 +260,9 @@ def _aggregate_source_report(reports: list[Report], total_snapshots: int, tool_n
     """Combine reports without deduplicating findings before the merge agent."""
     report_buckets = {str(index): report.issue_list for index, report in enumerate(reports)}
     return merge_static_reports(reports, total_snapshots, report_buckets, tool_name)
+
+
+def append_cross_screen_issues(merge_report: Report, cross_screen_report: Report) -> Report:
+    """Create the final report by appending cross-screen findings without deduplication."""
+    issues = [*merge_report.issue_list, *cross_screen_report.issue_list]
+    return merge_report.model_copy(update={"issue_list": issues, "total_issues": len(issues)})
