@@ -1,1 +1,2 @@
-# ax_tester_mobile
+# Accessibility Tester
+AI agent capable of testing the accessibility of mobile app.

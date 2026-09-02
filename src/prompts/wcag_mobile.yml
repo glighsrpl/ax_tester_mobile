@@ -1,0 +1,1834 @@
+# WCAG 2.2 Mobile Accessibility Rules
+# Based on W3C WCAG2Mobile document (May 2025)
+# Adapted for native mobile applications (Android/iOS)
+
+wcag_version: "2.2"
+
+output_requirements:
+  problem_schema:
+    - "For each issue: id, wcag_rule, description, severity, source, confidence, element_index, bounds, element_class, activity, snapshot_id, fix, why_this_matters, potential_exposures."
+    - "element_index must reference the element's index in the accessibility tree for that snapshot."
+    - "bounds must be the element's pixel bounds as reported by UIAutomator (e.g. '[0,0][1080,192]')."
+    - "element_class must be the Android View class name (e.g. 'android.widget.ImageButton')."
+    - "activity must be the fully qualified Activity name where the issue was found."
+    - "snapshot_id must reference the specific screen capture where the issue was detected."
+    - "why_this_matters must be one concise, plain-language sentence about why the issue affects users."
+    - "potential_exposures must be a list of objects with category and description strings; keep categories short and descriptions concise."
+    - "Do not include extra keys beyond the required schema."
+    - "Do not report criteria from other levels than the one requested."
+    - "If not applicable: skip and do not output an issue."
+    - "Do not report issues on elements with importantForAccessibility=no unless the element is interactive."
+
+levels:
+  A:
+    scope: "WCAG 2.2 Level A Success Criteria only"
+    success_criteria:
+      - id: "1.1.1"
+        title: "Non-text Content"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "Not all mobile platforms provide a way to programmatically associate a label with non-text content. Developers must use platform-specific accessibility APIs to ensure non-text content has appropriate text alternatives."
+        description: >
+          All non-text content presented to the user in a view has a text
+          alternative that serves the equivalent purpose, except for situations
+          listed in WCAG (controls/input, time-based media, test, sensory,
+          CAPTCHA, decoration/formatting/invisible). On mobile, this means every
+          ImageView, icon, graphic, or non-text UI element must have an
+          accessible name via contentDescription (Android) or accessibilityLabel
+          (iOS), or be marked as decorative/not important for accessibility.
+        examples:
+          - context: "Android"
+            description: "An ImageButton for 'Share' has android:contentDescription='Share' set in XML or programmatically."
+          - context: "iOS"
+            description: "A UIImageView used as a logo has accessibilityLabel = 'Company Logo' set, or if decorative, isAccessibilityElement = false."
+          - context: "Flutter"
+            description: "An Image widget wrapped in Semantics(label: 'Profile photo of user') widget."
+          - context: "Decorative image"
+            description: "A decorative divider ImageView has android:importantForAccessibility='no' (Android) or isAccessibilityElement = false (iOS)."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Enable TalkBack and navigate through all non-text elements"
+              - "Verify each meaningful image/icon is announced with a descriptive label"
+              - "Verify decorative images are skipped by focus"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Enable VoiceOver and swipe through all non-text elements"
+              - "Verify each meaningful image/icon is announced with a descriptive label"
+              - "Verify decorative images are not focused"
+          - tool: "Accessibility Scanner (Android)"
+            steps:
+              - "Run scanner on each screen"
+              - "Check for 'Missing content description' warnings"
+          - tool: "UIAutomator / Layout Inspector (Android)"
+            steps:
+              - "Inspect accessibility tree nodes"
+              - "Verify contentDescription is set on non-text content"
+          - tool: "Xcode Accessibility Inspector (iOS)"
+            steps:
+              - "Inspect each element's accessibility properties"
+              - "Verify label is present for non-text content"
+        common_fixes:
+          - platform: "Android"
+            fix: "Set android:contentDescription on ImageView/ImageButton, or use ViewCompat.setAccessibilityDelegate for dynamic content. Mark decorative images with android:importantForAccessibility='no'."
+          - platform: "iOS"
+            fix: "Set accessibilityLabel on UIImageView or custom views. Mark decorative images with isAccessibilityElement = false."
+          - platform: "Flutter"
+            fix: "Use Semantics widget with label property, or set excludeFromSemantics: true on Image widgets that are decorative."
+
+      - id: "1.2.1"
+        title: "Audio-only and Video-only (Prerecorded)"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          For prerecorded audio-only and prerecorded video-only media presented
+          in a view, an alternative is provided that presents equivalent
+          information. For audio-only, a text transcript is provided. For
+          video-only (no audio), either a text alternative or an audio track
+          describing the video content is provided.
+        examples:
+          - context: "Audio-only (podcast clip)"
+            description: "A podcast preview in an app provides a text transcript accessible below the player or via a 'Transcript' button."
+          - context: "Video-only (animation)"
+            description: "A silent instructional animation has a descriptive text alternative below it explaining the steps shown."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all prerecorded audio-only and video-only content in the app"
+              - "Verify a text transcript or audio description is provided and accessible"
+              - "With TalkBack/VoiceOver enabled, confirm the alternative can be reached and read"
+        common_fixes:
+          - platform: "Android"
+            fix: "Provide a TextView or expandable section with transcript text adjacent to the media player. Ensure transcript view is accessible."
+          - platform: "iOS"
+            fix: "Add a UITextView or disclosure section containing the transcript. Ensure it is reachable via VoiceOver."
+
+      - id: "1.2.2"
+        title: "Captions (Prerecorded)"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Captions are provided for all prerecorded audio content in
+          synchronized media presented in a view, except when the media is a
+          media alternative for text and is clearly labeled as such.
+        examples:
+          - context: "Video player in app"
+            description: "An in-app video player (ExoPlayer/AVPlayer) displays closed captions sourced from WebVTT or TTML sidecar files."
+          - context: "Social media video"
+            description: "User-generated video content has burned-in or togglable captions."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Play all prerecorded video content with audio"
+              - "Enable captions via the player controls or system settings"
+              - "Verify captions are accurate, synchronized, and include relevant sound effects"
+          - tool: "Platform caption settings"
+            steps:
+              - "Enable system-wide captions (Android: Settings > Accessibility > Captions; iOS: Settings > Accessibility > Subtitles & Captioning)"
+              - "Verify app respects system caption preferences"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use ExoPlayer with SubtitleView and provide WebVTT/TTML subtitle tracks. Respect CaptioningManager preferences."
+          - platform: "iOS"
+            fix: "Use AVPlayer with AVMediaCharacteristic.legible tracks. Add subtitle assets to AVMutableComposition or use external WebVTT."
+
+      - id: "1.2.3"
+        title: "Audio Description or Media Alternative (Prerecorded)"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          An alternative for time-based media or audio description of the
+          prerecorded video content is provided for synchronized media presented
+          in a view, except when the media is a media alternative for text and
+          is clearly labeled as such.
+        examples:
+          - context: "Training video in app"
+            description: "A training video includes an audio description track that narrates visual-only content during pauses in dialogue, selectable via player settings."
+          - context: "Text alternative"
+            description: "A short explanatory video has a full text transcript linked below that describes all visual and audio content."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify prerecorded synchronized media in the app"
+              - "Check for availability of audio description track or full text alternative"
+              - "Verify audio descriptions accurately convey visual information not in main audio"
+        common_fixes:
+          - platform: "Android"
+            fix: "Provide an additional audio track via ExoPlayer track selection API, or supply a full text transcript in an accessible view."
+          - platform: "iOS"
+            fix: "Add an AVMediaCharacteristic.describesVideoForAccessibility track to the AVAsset, or provide a full text transcript."
+
+      - id: "1.3.1"
+        title: "Info and Relationships"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          Information, structure, and relationships conveyed through presentation
+          in a view can be programmatically determined or are available in text.
+          On mobile, this means using native platform controls and accessibility
+          properties to convey structure (headings, lists, form labels, tables,
+          groupings) rather than relying solely on visual styling.
+        examples:
+          - context: "Android headings"
+            description: "Section headings use android:accessibilityHeading='true' (API 28+) or AccessibilityNodeInfoCompat.setHeading(true) so TalkBack announces them as headings."
+          - context: "iOS headings"
+            description: "Section headings use accessibilityTraits = .header so VoiceOver identifies them in rotor navigation."
+          - context: "Form labels"
+            description: "EditText fields use android:labelFor or are wrapped in TextInputLayout (Android). UITextField has accessibilityLabel set or is associated via UIAccessibility (iOS)."
+          - context: "Grouped content"
+            description: "A rating component groups its stars in a single accessible element with a combined description like 'Rating: 4 out of 5 stars'."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Navigate with headings (swipe gesture or TalkBack menu)"
+              - "Verify headings are announced with 'heading' role"
+              - "Verify list items announce position (e.g., 'item 3 of 10')"
+              - "Verify form fields announce their labels"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Use rotor set to Headings and swipe up/down"
+              - "Verify section headings are navigable"
+              - "Verify form fields announce labels and traits"
+          - tool: "UIAutomator / Layout Inspector (Android)"
+            steps:
+              - "Inspect accessibility tree for heading attributes, collection info, labeling"
+          - tool: "Xcode Accessibility Inspector (iOS)"
+            steps:
+              - "Verify traits (header, button, etc.) and labels are correctly assigned"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use accessibilityHeading, labelFor, RecyclerView (which auto-provides collection semantics), and ViewGroup.setAccessibilityDelegate for grouping."
+          - platform: "iOS"
+            fix: "Use .header trait, accessibilityLabel, UIAccessibilityContainer protocol, and proper UITableView/UICollectionView structure."
+          - platform: "Flutter"
+            fix: "Use Semantics(header: true), MergeSemantics for grouping, and proper semantic annotations."
+
+      - id: "1.3.2"
+        title: "Meaningful Sequence"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          When the sequence in which content is presented in a view affects its
+          meaning, a correct reading sequence can be programmatically determined.
+          On mobile, the accessibility traversal order in the accessibility tree
+          must reflect the meaningful reading order of the content.
+        examples:
+          - context: "Android"
+            description: "A complex layout using ConstraintLayout sets android:accessibilityTraversalBefore/After to ensure logical reading order when default traversal is incorrect."
+          - context: "iOS"
+            description: "A custom layout overrides accessibilityElements array to provide correct reading order for VoiceOver."
+          - context: "Common issue"
+            description: "A two-column layout where TalkBack reads left-column then right-column elements interleaved incorrectly is fixed by explicit traversal ordering."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Swipe through all elements sequentially"
+              - "Verify the reading order matches the logical/visual content order"
+              - "Check that related content is read together in the correct sequence"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Swipe through all elements sequentially"
+              - "Verify reading order matches meaningful sequence"
+          - tool: "UIAutomator (Android)"
+            steps:
+              - "Dump accessibility tree and verify node order matches logical reading sequence"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use android:accessibilityTraversalBefore/After attributes, or setAccessibilityTraversalBefore/After() programmatically. Ensure layout XML ordering reflects logical sequence."
+          - platform: "iOS"
+            fix: "Override accessibilityElements to return elements in correct order. Use shouldGroupAccessibilityChildren for grouped content."
+
+      - id: "1.3.3"
+        title: "Sensory Characteristics"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Instructions provided for understanding and operating content in a
+          view do not rely solely on sensory characteristics of components such
+          as shape, color, size, visual location, orientation, or sound.
+        examples:
+          - context: "Navigation instruction"
+            description: "Instead of 'Tap the round button on the right,' the instruction reads 'Tap the Submit button' with the button also labeled 'Submit'."
+          - context: "Error indication"
+            description: "Instead of 'Fields marked in red have errors,' the instruction reads 'Fields marked with an error icon and message have errors.'"
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Review all instructional text in the app"
+              - "Verify instructions do not rely solely on shape, color, size, location, orientation, or sound"
+              - "Confirm non-visual users can follow the instructions"
+        common_fixes:
+          - platform: "Android/iOS"
+            fix: "Supplement visual/sensory instructions with text-based identifiers. Reference controls by their accessible names, not visual characteristics alone."
+
+      - id: "1.4.1"
+        title: "Use of Color"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "If a mobile platform's built-in distinction relies only on color, additional visual means must convey the information. Developers must ensure color is not the sole method of conveying information, indicating an action, prompting a response, or distinguishing a visual element."
+        description: >
+          Color is not used as the only visual means of conveying information,
+          indicating an action, prompting a response, or distinguishing a visual
+          element in a view. On mobile platforms where built-in controls may rely
+          on color alone (e.g., selected tab color), additional indicators such
+          as icons, underlines, or text labels must be provided.
+        examples:
+          - context: "Form validation"
+            description: "Error fields are indicated not only by a red border but also by an error icon and descriptive error message text."
+          - context: "Tab selection"
+            description: "The selected tab is indicated by both a different color AND an underline indicator or bold text."
+          - context: "Chart/graph"
+            description: "A pie chart uses different patterns/textures in addition to colors, and a legend with text labels."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Enable grayscale mode on the device (Android: Developer options; iOS: Accessibility > Display > Color Filters > Grayscale)"
+              - "Navigate through the app and verify all information previously conveyed by color alone is still distinguishable"
+              - "Check form validation, status indicators, links, charts, and selected states"
+          - tool: "Accessibility Scanner (Android)"
+            steps:
+              - "Check for contrast issues which may indicate over-reliance on color"
+        common_fixes:
+          - platform: "Android"
+            fix: "Add icons, text labels, underlines, or shape changes alongside color. Use setError() on TextInputLayout which adds both icon and text."
+          - platform: "iOS"
+            fix: "Add supplementary indicators (icons, underlines, bold, patterns). Use UITextField error states with visible icons/text."
+
+      - id: "1.4.2"
+        title: "Audio Control"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "Replace 'on a Web page' with 'in a view'. If any audio in a view plays automatically for more than 3 seconds, either a mechanism is available to pause or stop the audio, or a mechanism is available to control audio volume independently from the overall system volume level."
+        description: >
+          If any audio in a view plays automatically for more than 3 seconds,
+          either a mechanism is available to pause or stop the audio, or a
+          mechanism is available to control audio volume independently from the
+          overall system volume level.
+        examples:
+          - context: "Auto-playing video feed"
+            description: "A social media feed that auto-plays videos provides a mute button on each video and respects the device silent mode."
+          - context: "Background music"
+            description: "An app with background music provides an accessible settings toggle to pause/stop audio independently."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Open each screen and check if audio plays automatically"
+              - "If auto-playing audio lasts more than 3 seconds, verify there is a pause/stop/mute control"
+              - "Verify the control is accessible via TalkBack/VoiceOver"
+              - "Verify audio does not interfere with screen reader speech"
+        common_fixes:
+          - platform: "Android"
+            fix: "Provide a visible and accessible pause/mute button. Use AudioManager to respect audio focus. Avoid auto-playing audio longer than 3 seconds without user control."
+          - platform: "iOS"
+            fix: "Provide a visible and accessible pause/mute button. Use AVAudioSession categories appropriately. Respect silent switch."
+
+      - id: "2.1.1"
+        title: "Keyboard"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          All functionality of the content in a view is operable through a
+          keyboard interface or alternative input methods (external keyboard,
+          switch access, TalkBack/VoiceOver gestures) without requiring specific
+          timings for individual keystrokes, except where the underlying function
+          requires input that depends on the path of the user's movement and not
+          just the endpoints.
+        examples:
+          - context: "External keyboard (Android)"
+            description: "All interactive elements (buttons, links, form fields, custom controls) can be reached and activated using Tab/Shift+Tab navigation and Enter/Space with an external Bluetooth keyboard."
+          - context: "Switch Access"
+            description: "All interactive elements are reachable and activatable via Switch Access scanning."
+          - context: "Custom view"
+            description: "A custom drawing canvas allows drawing via gestures but also provides toolbar buttons for shape insertion accessible via keyboard/switch."
+        how_to_test:
+          - tool: "External keyboard (Android/iOS)"
+            steps:
+              - "Connect a Bluetooth keyboard"
+              - "Navigate using Tab, Shift+Tab, arrow keys"
+              - "Activate controls with Enter/Space"
+              - "Verify all functionality is reachable and operable"
+          - tool: "Switch Access (Android)"
+            steps:
+              - "Enable Switch Access"
+              - "Verify all interactive elements are scannable and activatable"
+          - tool: "Switch Control (iOS)"
+            steps:
+              - "Enable Switch Control"
+              - "Verify all interactive elements are reachable"
+        common_fixes:
+          - platform: "Android"
+            fix: "Ensure all custom views implement onKeyEvent handling. Use standard focusable views. Set android:focusable='true' on interactive custom views. Implement AccessibilityNodeInfo actions."
+          - platform: "iOS"
+            fix: "Ensure all custom controls implement UIKeyInput or respond to pressesBegan. Use standard UIKit controls where possible. Implement accessibilityActivate() for custom controls."
+
+      - id: "2.1.2"
+        title: "No Keyboard Trap"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          If keyboard focus (or assistive technology focus) can be moved to a
+          component in a view using a keyboard interface or alternative input,
+          then focus can be moved away from that component using the same
+          interface. If it requires more than unmodified arrow or tab keys (or
+          standard exit methods), the user is advised of the method.
+        examples:
+          - context: "Modal dialog"
+            description: "A modal bottom sheet traps focus within itself while open but allows dismissal via a Close button or Escape key, after which focus returns to the triggering element."
+          - context: "Video player"
+            description: "A full-screen video player allows exiting full-screen mode via Back button or an accessible on-screen exit control."
+        how_to_test:
+          - tool: "External keyboard"
+            steps:
+              - "Tab into every interactive component including modals, dialogs, and custom controls"
+              - "Verify focus can always be moved away using Tab, Shift+Tab, Escape, or Back"
+              - "Check that no component traps focus indefinitely"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Navigate into modals and complex components"
+              - "Verify you can exit and move focus away"
+        common_fixes:
+          - platform: "Android"
+            fix: "Ensure dialogs and bottom sheets handle Back button properly. Avoid overriding key events without providing an exit path. Use standard Dialog/BottomSheet patterns."
+          - platform: "iOS"
+            fix: "Ensure modal view controllers can be dismissed. Implement accessibilityPerformEscape() to handle dismiss gestures. Use standard UIKit presentation."
+
+      - id: "2.1.4"
+        title: "Character Key Shortcuts"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          If a keyboard shortcut is implemented in a view using only letter
+          (including upper- and lower-case), punctuation, number, or symbol
+          characters, then at least one of the following is true: the shortcut
+          can be turned off, remapped, or is only active when the relevant
+          interface component has focus.
+        examples:
+          - context: "Chat app shortcuts"
+            description: "A messaging app that uses single-key shortcuts (e.g., 'R' for reply) only activates them when the message list has focus, not when typing in the text field."
+          - context: "Remappable shortcuts"
+            description: "An app with keyboard shortcuts provides a settings screen to remap or disable shortcuts."
+        how_to_test:
+          - tool: "External keyboard"
+            steps:
+              - "Connect external keyboard and test for single character key shortcuts"
+              - "Verify shortcuts can be turned off, remapped, or are scoped to focused components"
+              - "Verify shortcuts don't trigger during text input"
+        common_fixes:
+          - platform: "Android"
+            fix: "Scope shortcuts to specific focused views via onKeyDown/onKeyUp. Provide settings to disable shortcuts. Use KeyEvent handling only when relevant view has focus."
+          - platform: "iOS"
+            fix: "Use UIKeyCommand with appropriate scope. Ensure commands are only active in relevant responder chain. Provide settings to disable/remap."
+
+      - id: "2.2.1"
+        title: "Timing Adjustable"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          For each time limit that is set by the content in a view, at least one
+          of the following is true: the user can turn off, adjust, or extend the
+          time limit (with specific exceptions for real-time, essential, or
+          20-hour minimum limits).
+        examples:
+          - context: "Session timeout"
+            description: "A banking app warns users 30 seconds before session timeout with an accessible dialog allowing them to extend the session."
+          - context: "Auto-advancing carousel"
+            description: "A carousel provides a pause button and respects prefers-reduced-motion settings."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all time-limited content (session timeouts, auto-advancing slides, timed forms)"
+              - "Verify user can turn off, adjust, or extend time limits"
+              - "Verify timeout warnings are announced by TalkBack/VoiceOver"
+              - "Test with screen reader which may slow interaction speed"
+        common_fixes:
+          - platform: "Android"
+            fix: "Show an AlertDialog before timeout with options to extend. Use AccessibilityEvent.TYPE_ANNOUNCEMENT for timeout warnings. Pause auto-advance when accessibility services are active."
+          - platform: "iOS"
+            fix: "Present UIAlertController before timeout. Use UIAccessibility.post(notification:) to announce warnings. Check UIAccessibility.isVoiceOverRunning to extend default timeouts."
+
+      - id: "2.2.2"
+        title: "Pause, Stop, Hide"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          For moving, blinking, scrolling, or auto-updating information in a
+          view: (1) Moving/blinking/scrolling content that starts automatically,
+          lasts more than 5 seconds, and is presented alongside other content
+          can be paused, stopped, or hidden by the user. (2) Auto-updating
+          content that starts automatically can be paused, stopped, hidden, or
+          have its frequency controlled.
+        examples:
+          - context: "Auto-scrolling news ticker"
+            description: "A news ticker provides a pause button accessible to all users including assistive technology users."
+          - context: "Loading animation"
+            description: "A loading spinner that lasts more than 5 seconds has a text status update and can be dismissed if content fails to load."
+          - context: "Auto-refreshing feed"
+            description: "A live feed has a 'Pause updates' toggle and does not auto-scroll the user's current position."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all moving, blinking, scrolling, or auto-updating content"
+              - "Verify pause/stop/hide controls are available and accessible"
+              - "Check that animations respect system reduce-motion settings"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Verify controls for pausing/stopping are reachable and operable"
+        common_fixes:
+          - platform: "Android"
+            fix: "Provide accessible pause/stop controls. Check Settings.Global.getFloat(ANIMATOR_DURATION_SCALE) or AccessibilityManager.isEnabled() to reduce/pause animations."
+          - platform: "iOS"
+            fix: "Provide accessible pause/stop controls. Check UIAccessibility.isReduceMotionEnabled to minimize or pause animations."
+
+      - id: "2.3.1"
+        title: "Three Flashes or Below Threshold"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Views do not contain anything that flashes more than three times in any
+          one second period, or the flash is below the general flash and red
+          flash thresholds.
+        examples:
+          - context: "Video content"
+            description: "Video content in the app is analyzed to ensure no sequence flashes more than 3 times per second."
+          - context: "UI animations"
+            description: "Transition animations do not produce rapid flashing effects. Loading indicators use smooth animations rather than rapid blinking."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Review all video content and animations for flashing"
+              - "Use PEAT (Photosensitive Epilepsy Analysis Tool) on captured screen recordings if flashing is suspected"
+              - "Verify no content flashes more than 3 times per second"
+        common_fixes:
+          - platform: "Android/iOS"
+            fix: "Avoid rapid flashing in animations and video. If flashing content must be shown, ensure it is below threshold or provide a warning and ability to skip."
+
+      - id: "2.4.1"
+        title: "Bypass Blocks"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          A mechanism is available to bypass blocks of content that are repeated
+          on multiple screens. On mobile, this is typically achieved through
+          proper heading structure (enabling screen reader heading navigation),
+          landmark/region semantics, or skip-to-content mechanisms.
+        examples:
+          - context: "Android"
+            description: "Screens use AccessibilityNodeInfo headings so TalkBack users can jump between sections using heading navigation gestures (swipe up/down with reading controls set to Headings)."
+          - context: "iOS"
+            description: "Screens use .header accessibility trait on section headings, enabling VoiceOver rotor heading navigation to skip repeated navigation elements."
+          - context: "Navigation drawer"
+            description: "A persistent navigation drawer can be dismissed and focus moved directly to main content."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Set reading control to Headings"
+              - "Swipe up/down to navigate by headings"
+              - "Verify users can skip past repeated navigation to reach main content"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Use Rotor set to Headings"
+              - "Swipe up/down to navigate between headings"
+              - "Verify repeated blocks can be bypassed"
+        common_fixes:
+          - platform: "Android"
+            fix: "Mark section headings with android:accessibilityHeading='true'. Structure content with clear heading hierarchy."
+          - platform: "iOS"
+            fix: "Apply .header trait to section headings. Group navigation elements so VoiceOver can efficiently skip them."
+
+      - id: "2.4.2"
+        title: "Page Titled"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "Individual windows or screens should also have descriptive titles as a best practice. On mobile, each screen (Activity/Fragment on Android, ViewController on iOS) should have a descriptive title announced by assistive technology."
+        description: >
+          Screens have titles that describe their topic or purpose. On mobile
+          platforms, each view/screen must have a descriptive title that is
+          programmatically determinable and announced when the screen is
+          displayed or navigated to.
+        examples:
+          - context: "Android"
+            description: "Each Activity sets a descriptive title via setTitle() or Toolbar title that TalkBack announces on screen transition: 'Order History' instead of generic 'Screen 3'."
+          - context: "iOS"
+            description: "Each UIViewController sets self.title or navigationItem.title to a descriptive value announced by VoiceOver: 'Settings - Notifications'."
+          - context: "Tab navigation"
+            description: "When switching tabs, the screen title updates to reflect the current tab content."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Navigate to each screen in the app"
+              - "Verify TalkBack announces a descriptive screen title on entry"
+              - "Check that the title describes the screen's purpose"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Navigate to each screen"
+              - "Verify VoiceOver announces the screen title"
+              - "Verify the title is descriptive and unique"
+        common_fixes:
+          - platform: "Android"
+            fix: "Set Activity.setTitle() or use Toolbar/ActionBar title. For Fragment-based navigation, update title on fragment transactions."
+          - platform: "iOS"
+            fix: "Set self.title on UIViewController. For navigation controllers, set navigationItem.title. For tab bars, set each tab's title."
+
+      - id: "2.4.3"
+        title: "Focus Order"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          If a view can be navigated sequentially using assistive technology or
+          alternative input and the navigation sequences affect meaning or
+          operation, focusable components receive focus in an order that preserves
+          meaning and operability.
+        examples:
+          - context: "Form layout"
+            description: "A registration form navigates in logical order: first name, last name, email, password, submit button — matching the visual top-to-bottom layout."
+          - context: "Dialog"
+            description: "When a dialog opens, focus moves to the dialog title or first interactive element. When dismissed, focus returns to the triggering element."
+          - context: "Dynamic content"
+            description: "When new content appears (e.g., form validation error), focus or announcement is directed to the new content."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Swipe through all elements on each screen"
+              - "Verify focus order is logical and matches visual layout"
+              - "Verify focus moves correctly when dialogs open/close"
+              - "Verify focus is managed when dynamic content appears"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Swipe through all elements"
+              - "Verify logical order and proper focus management for dynamic changes"
+          - tool: "External keyboard"
+            steps:
+              - "Tab through all focusable elements"
+              - "Verify order is logical"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use android:accessibilityTraversalBefore/After for custom order. Use requestFocus() or sendAccessibilityEvent() to manage focus on dynamic changes. Ensure dialog shows with proper focus."
+          - platform: "iOS"
+            fix: "Override accessibilityElements order. Use UIAccessibility.post(.screenChanged, argument:) or .layoutChanged for focus management. Set accessibilityViewIsModal for dialogs."
+
+      - id: "2.4.4"
+        title: "Link Purpose (In Context)"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          The purpose of each link or interactive element can be determined from
+          the link text alone or from the link text together with its
+          programmatically determined link context, except where the purpose
+          would be ambiguous to users in general.
+        examples:
+          - context: "List items with actions"
+            description: "Instead of multiple 'View details' buttons, each button's contentDescription includes context: 'View details for Order #12345'."
+          - context: "Inline links"
+            description: "A 'Learn more' link in a paragraph has contentDescription 'Learn more about accessibility features' or the link context is programmatically associated."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Navigate to all links and actionable elements"
+              - "Verify each announces a purpose that is clear in context"
+              - "Use Links navigation (reading controls) and verify link text is meaningful"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Use Rotor > Links to list all links"
+              - "Verify each link's label is meaningful in context"
+        common_fixes:
+          - platform: "Android"
+            fix: "Set descriptive contentDescription on ambiguous links. Use RecyclerView item contentDescription that includes parent context. Use android:labelFor associations."
+          - platform: "iOS"
+            fix: "Set descriptive accessibilityLabel on ambiguous links. Use accessibilityUserInputLabels for multiple contexts. Ensure link text is descriptive."
+
+      - id: "2.5.1"
+        title: "Pointer Gestures"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          All functionality that uses multipoint or path-based gestures for
+          operation can be operated with a single pointer without a path-based
+          gesture, unless a multipoint or path-based gesture is essential.
+        examples:
+          - context: "Pinch-to-zoom"
+            description: "A map view supports pinch-to-zoom but also provides zoom in/out buttons as single-tap alternatives."
+          - context: "Swipe-to-delete"
+            description: "A list with swipe-to-delete also provides a long-press context menu or edit mode with delete buttons."
+          - context: "Multi-finger gesture"
+            description: "A two-finger rotate gesture has an alternative toolbar rotation control."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all multipoint gestures (pinch, multi-finger) and path-based gestures (swipe, drag)"
+              - "Verify each has a single-pointer alternative (tap, single click)"
+              - "Test with one finger only that all functionality is achievable"
+          - tool: "Switch Access/Switch Control"
+            steps:
+              - "Verify all functionality is available without complex gestures"
+        common_fixes:
+          - platform: "Android"
+            fix: "Provide button alternatives for pinch/zoom, swipe actions. Use PopupMenu or ContextMenu for swipe-to-action alternatives. Implement both gesture and button controls."
+          - platform: "iOS"
+            fix: "Provide button alternatives for all gesture-only actions. Use UIContextMenuConfiguration for long-press alternatives. Add + / - buttons for zoom."
+
+      - id: "2.5.2"
+        title: "Pointer Cancellation"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          For functionality that can be operated using a single pointer, at least
+          one of the following is true: no down-event, can abort/undo, up reversal,
+          or essential. The action is triggered on the up-event (finger lift),
+          the action can be aborted by moving the pointer off the target before
+          releasing, or an undo mechanism is available.
+        examples:
+          - context: "Standard buttons"
+            description: "Native Android/iOS buttons already fire on up-event (ACTION_UP/touchUpInside). Custom views must replicate this behavior."
+          - context: "Drag and drop"
+            description: "A drag operation can be cancelled by dropping on the original position or an invalid target, reverting the action."
+          - context: "Custom control"
+            description: "A custom circular menu activates selections on finger lift, allowing users to slide to a different option before releasing."
+        how_to_test:
+          - tool: "Manual testing"
+            steps:
+              - "Touch down on interactive elements and slide finger away before releasing"
+              - "Verify the action does not trigger when pointer moves off target"
+              - "Verify actions trigger on up-event, not down-event"
+              - "For actions that do trigger on down, verify an undo mechanism exists"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use standard click listeners (triggered on ACTION_UP). For custom touch handling, implement cancellation in onTouchEvent by checking ACTION_CANCEL and pointer position on ACTION_UP."
+          - platform: "iOS"
+            fix: "Use .touchUpInside control events (default for UIButton). For custom gesture recognizers, implement cancellation logic."
+
+      - id: "2.5.3"
+        title: "Label in Name"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          For user interface components with labels that include text or images
+          of text, the accessible name contains the text that is presented
+          visually. This ensures voice control users can activate controls by
+          speaking the visible label.
+        examples:
+          - context: "Button with visible text"
+            description: "A button displaying 'Submit Order' has contentDescription or accessibilityLabel that starts with or contains 'Submit Order' (not a completely different accessible name like 'Complete purchase')."
+          - context: "Voice Access"
+            description: "A user says 'Tap Submit Order' and Voice Access correctly identifies the button because its accessible name matches the visible text."
+        how_to_test:
+          - tool: "Voice Access (Android)"
+            steps:
+              - "Enable Voice Access"
+              - "Say the visible label text of each control"
+              - "Verify the correct control is activated"
+          - tool: "Voice Control (iOS)"
+            steps:
+              - "Enable Voice Control"
+              - "Say 'Tap [visible text]' for each control"
+              - "Verify the correct control responds"
+          - tool: "UIAutomator / Accessibility Inspector"
+            steps:
+              - "Compare visible text of controls to their accessible names"
+              - "Verify accessible names contain the visible text"
+        common_fixes:
+          - platform: "Android"
+            fix: "If contentDescription is set, ensure it starts with or contains the visible text. Prefer not setting contentDescription on buttons/textviews that already have text (accessibility uses getText() by default)."
+          - platform: "iOS"
+            fix: "Ensure accessibilityLabel contains the visible text. If no custom label is set, UIKit uses the button title by default."
+
+      - id: "2.5.4"
+        title: "Motion Actuation"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Functionality that can be operated by device motion or user motion can
+          also be operated by user interface components, and responding to the
+          motion can be disabled to prevent accidental actuation, except when the
+          motion is essential or disabling would invalidate the activity.
+        examples:
+          - context: "Shake to undo"
+            description: "A shake-to-undo feature also provides an on-screen undo button accessible to all users. Shake can be disabled in app settings."
+          - context: "Tilt to scroll"
+            description: "A game that uses tilt for navigation also provides on-screen directional buttons. Tilt control can be disabled in settings."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all motion-triggered functionality (shake, tilt, device rotation)"
+              - "Verify each has a UI button/control alternative"
+              - "Verify motion actuation can be disabled in settings"
+              - "Test alternative controls with device on a flat surface"
+        common_fixes:
+          - platform: "Android"
+            fix: "Provide on-screen button alternatives for all motion-triggered actions. Add a toggle in settings to disable motion detection. Use SensorManager with user preference checks."
+          - platform: "iOS"
+            fix: "Provide on-screen alternatives for all CMMotionManager or shake-triggered features. Add settings toggle to disable. Implement alternative UI controls."
+
+      - id: "3.1.1"
+        title: "Language of Page"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          The default human language of each screen can be programmatically
+          determined. On mobile, this is typically handled by the platform locale
+          settings, but apps must ensure content language is correctly identified
+          for screen readers to use proper pronunciation.
+        examples:
+          - context: "Android"
+            description: "The app's locale is set correctly in configuration, and TalkBack uses the correct TTS language for content. Content in a specific language uses LocaleSpan for mixed-language text."
+          - context: "iOS"
+            description: "The app's primary language is set in Info.plist (CFBundleDevelopmentRegion) and accessibilityLanguage is set on views with non-default language content."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Verify TalkBack reads content with correct language pronunciation"
+              - "Check app locale matches content language"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Verify VoiceOver uses correct language for content"
+              - "Check app's primary language setting in Info.plist"
+        common_fixes:
+          - platform: "Android"
+            fix: "Set appropriate Locale in app configuration. Use LocaleSpan for mixed-language text within a single view. Ensure resources match declared locale."
+          - platform: "iOS"
+            fix: "Set CFBundleDevelopmentRegion and CFBundleLocalizations in Info.plist. Use accessibilityLanguage on elements with non-primary language content."
+
+      - id: "3.2.1"
+        title: "On Focus"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          When any user interface component in a view receives focus, it does not
+          initiate a change of context. Receiving focus alone should not trigger
+          actions like navigating to a new screen, submitting a form, or
+          significantly rearranging content.
+        examples:
+          - context: "Form field"
+            description: "Focusing an input field does not automatically submit the form or navigate away. Only explicit user action (e.g., pressing a submit button) initiates context changes."
+          - context: "Navigation tabs"
+            description: "Moving focus to a tab (via keyboard/switch) does not automatically switch to that tab's content. The tab must be explicitly activated."
+        how_to_test:
+          - tool: "External keyboard / Switch Access"
+            steps:
+              - "Tab through all focusable elements"
+              - "Verify no context change occurs on focus alone"
+              - "Verify forms are not submitted and screens do not change just by receiving focus"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Navigate through elements and verify no unexpected changes occur"
+        common_fixes:
+          - platform: "Android"
+            fix: "Do not trigger navigation or submission in OnFocusChangeListener. Use onClick/onActivate for actions. Separate focus events from activation events."
+          - platform: "iOS"
+            fix: "Do not trigger actions in becomeFirstResponder or accessibilityElementDidBecomeFocused. Use explicit tap/activate actions."
+
+      - id: "3.2.2"
+        title: "On Input"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Changing the setting of any user interface component in a view does not
+          automatically cause a change of context unless the user has been
+          advised of the behavior before using the component.
+        examples:
+          - context: "Dropdown/picker"
+            description: "Selecting an item from a Spinner/Picker does not immediately navigate to a new screen. A separate 'Go' or 'Apply' button is provided, or the user is informed in advance."
+          - context: "Checkbox"
+            description: "Checking a checkbox in a filter does not immediately refresh and scroll the page without warning. Either a separate 'Apply' button is used, or the behavior is clearly communicated."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Interact with all form controls (checkboxes, radio buttons, pickers, sliders)"
+              - "Verify changing a value does not cause unexpected navigation or significant layout change"
+              - "If context change occurs on input, verify user was informed beforehand"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Change values of controls and verify no unexpected context changes"
+        common_fixes:
+          - platform: "Android"
+            fix: "Avoid startActivity or significant UI changes in onItemSelected, onCheckedChanged. Provide explicit submit/apply buttons. If auto-change is necessary, inform users via text/contentDescription."
+          - platform: "iOS"
+            fix: "Avoid navigation in valueChanged handlers. Provide explicit submit buttons. Use descriptive labels to inform users of automatic behavior if unavoidable."
+
+      - id: "3.2.6"
+        title: "Consistent Help"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          If a set of screens contains help mechanisms (contact information,
+          help chat, FAQ link, self-help options), the help mechanisms occur in
+          the same relative order on each screen, unless a change is initiated
+          by the user.
+        examples:
+          - context: "Help button in toolbar"
+            description: "A help/support icon appears in the same position in the toolbar across all screens of the app."
+          - context: "Contact options"
+            description: "The support section in settings always shows options in the same order: FAQ, Chat, Email, Phone."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Navigate through multiple screens that contain help mechanisms"
+              - "Verify help options appear in the same relative position and order"
+              - "Check that the pattern is consistent throughout the app"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use a consistent toolbar menu item or FAB for help across all Activities/Fragments. Implement help through a shared component/module with consistent ordering."
+          - platform: "iOS"
+            fix: "Use a consistent navigation bar button or tab for help. Implement help through a shared component ensuring consistent order across view controllers."
+
+      - id: "3.3.1"
+        title: "Error Identification"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          If an input error is automatically detected in a view, the item that
+          is in error is identified and the error is described to the user in
+          text.
+        examples:
+          - context: "Android form"
+            description: "TextInputLayout.setError('Email format is invalid') displays the error visually and announces it to TalkBack when the field receives focus."
+          - context: "iOS form"
+            description: "A UITextField with invalid input shows an error label below and VoiceOver announces 'Error: Please enter a valid email address' when the field is focused."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Submit a form with invalid input"
+              - "Verify error messages are announced when focus moves to error fields"
+              - "Verify error text describes what went wrong"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Trigger validation errors"
+              - "Verify VoiceOver announces error messages on the affected fields"
+          - tool: "Accessibility Scanner (Android)"
+            steps:
+              - "Check that error states are properly conveyed"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use TextInputLayout.setError() which handles visual display and accessibility announcement. For custom views, announce errors via AccessibilityEvent and set error state in AccessibilityNodeInfo."
+          - platform: "iOS"
+            fix: "Set accessibilityLabel or accessibilityValue to include error text. Use UIAccessibility.post(.announcement) for immediate error notification. Add .staticText with error message near the field."
+
+      - id: "3.3.2"
+        title: "Labels or Instructions"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Labels or instructions are provided when content requires user input.
+          On mobile, all input fields must have visible labels or accessible
+          names that describe the expected input, plus any format instructions.
+        examples:
+          - context: "Android"
+            description: "TextInputLayout provides a visible floating label. Additional hint text like 'Format: MM/DD/YYYY' is shown and accessible via helperText or setContentDescription."
+          - context: "iOS"
+            description: "UITextField has a visible placeholder or associated UILabel. Format instructions like 'Enter date as DD/MM/YYYY' are provided as supplementary accessible text."
+        how_to_test:
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Navigate to all input fields"
+              - "Verify each announces a descriptive label"
+              - "Verify format instructions are accessible"
+          - tool: "Visual inspection"
+            steps:
+              - "Verify all input fields have visible labels (not just placeholder text)"
+              - "Verify required fields are indicated"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use TextInputLayout with hint text. Add android:labelFor on associated labels. Use helperText for format instructions. Mark required fields with '*' and explain the convention."
+          - platform: "iOS"
+            fix: "Provide visible UILabel associated via accessibilityLabel. Use placeholder as supplementary hint only. Add format instructions in supplementary text accessible to VoiceOver."
+
+      - id: "3.3.7"
+        title: "Redundant Entry"
+        level: "A"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Information previously entered by or provided to the user that is
+          required to be entered again in the same process is either
+          auto-populated or available for the user to select, unless re-entering
+          the information is essential, required for security, or the previously
+          entered information is no longer valid.
+        examples:
+          - context: "Multi-step form"
+            description: "A checkout flow that asks for billing address does not ask for shipping address again if it's the same — a 'Same as billing' checkbox pre-fills the fields."
+          - context: "Account creation"
+            description: "After entering an email on step 1, step 2 pre-fills the email field rather than asking the user to type it again."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Complete multi-step processes in the app"
+              - "Verify previously entered information is not requested again unless essential"
+              - "Verify auto-fill or selection mechanisms are provided for repeated data"
+              - "Test with TalkBack/VoiceOver that pre-filled values are announced"
+        common_fixes:
+          - platform: "Android"
+            fix: "Store form data across steps using ViewModel or SharedPreferences. Pre-populate fields with previously entered data. Provide 'Same as...' checkboxes. Use autofill service compatibility."
+          - platform: "iOS"
+            fix: "Persist form data across view controllers using data models. Pre-populate fields. Use textContentType for autofill support. Provide 'Same as...' toggles."
+
+      - id: "4.1.2"
+        title: "Name, Role, Value"
+        level: "A"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "This criterion is primarily for software developers who develop or use custom user interface components. Standard native platform controls already satisfy this criterion when used according to specification."
+        description: >
+          For all user interface components (including form elements, links, and
+          components generated by scripts/code), the name and role can be
+          programmatically determined; states, properties, and values that can be
+          set by the user can be programmatically set; and notification of
+          changes to these items is available to user agents or platform software,
+          including assistive technologies.
+        examples:
+          - context: "Custom toggle (Android)"
+            description: "A custom toggle view exposes its role as a switch, its name/label, and its checked/unchecked state via AccessibilityNodeInfo. State changes fire appropriate accessibility events."
+          - context: "Custom slider (iOS)"
+            description: "A custom slider control implements UIAccessibilityTraits.adjustable, sets accessibilityLabel, accessibilityValue, and responds to accessibilityIncrement/Decrement."
+          - context: "Flutter"
+            description: "A custom widget uses Semantics(label:, value:, toggled:, onTap:) to expose name, value, and state."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Navigate to all custom controls"
+              - "Verify TalkBack announces name, role, and state correctly"
+              - "Interact with controls and verify state changes are announced"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Navigate to all custom controls"
+              - "Verify VoiceOver announces label, trait, and value"
+              - "Verify state changes are announced"
+          - tool: "UIAutomator / Layout Inspector (Android)"
+            steps:
+              - "Inspect custom views in accessibility tree"
+              - "Verify className, contentDescription, text, checked/selected states"
+          - tool: "Xcode Accessibility Inspector (iOS)"
+            steps:
+              - "Inspect custom controls for label, traits, and value"
+        common_fixes:
+          - platform: "Android"
+            fix: "For custom views: override onInitializeAccessibilityNodeInfo to set className, contentDescription, and states. Fire AccessibilityEvent on state changes. Use AccessibilityDelegateCompat for adding semantics to existing views."
+          - platform: "iOS"
+            fix: "For custom controls: set accessibilityLabel, accessibilityTraits, accessibilityValue. Implement UIAccessibilityAction methods. Post .layoutChanged notifications on state changes."
+          - platform: "Flutter"
+            fix: "Wrap custom widgets in Semantics() with appropriate label, value, enabled, toggled, and action properties."
+
+  AA:
+    scope: "WCAG 2.2 Level AA Success Criteria only"
+    success_criteria:
+      - id: "1.2.4"
+        title: "Captions (Live)"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Captions are provided for all live audio content in synchronized media
+          presented in a view.
+        examples:
+          - context: "Live video stream"
+            description: "A live-streamed event in the app displays real-time captions using automated speech recognition or CART services."
+          - context: "Video call"
+            description: "A video conferencing feature provides live caption toggle using on-device speech recognition (Android Live Caption / iOS Live Captions)."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all live audio/video content in the app"
+              - "Verify real-time captions are available and accurate"
+              - "Test caption toggle and verify it works with assistive technology"
+        common_fixes:
+          - platform: "Android"
+            fix: "Integrate speech-to-text (Google Speech API, on-device Live Caption) for live captioning. Display captions in an accessible TextView overlay. Support system Live Caption feature."
+          - platform: "iOS"
+            fix: "Integrate speech recognition (SFSpeechRecognizer) or third-party captioning services. Display captions in accessible UI. Support system Live Captions (iOS 16+)."
+
+      - id: "1.2.5"
+        title: "Audio Description (Prerecorded)"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          Audio description is provided for all prerecorded video content in
+          synchronized media presented in a view.
+        examples:
+          - context: "Video player"
+            description: "An educational video in the app provides an alternative audio track with audio descriptions narrating visual-only content."
+          - context: "Track selection"
+            description: "The video player UI includes an accessible button to toggle audio description on/off."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all prerecorded video content with synchronized media"
+              - "Verify audio description track is available"
+              - "Verify audio descriptions accurately describe important visual content"
+              - "Verify audio description toggle is accessible"
+        common_fixes:
+          - platform: "Android"
+            fix: "Provide audio description as a separate audio track selectable via ExoPlayer track selection. Add accessible toggle button in player controls."
+          - platform: "iOS"
+            fix: "Add AVMediaCharacteristic.describesVideoForAccessibility track. Enable selection via player controls or system accessibility settings."
+
+      - id: "1.3.4"
+        title: "Orientation"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "It is considered a best practice to support all available orientations. Content should not restrict its view and operation to a single display orientation unless a specific orientation is essential (e.g., a piano app)."
+        description: >
+          Content does not restrict its view and operation to a single display
+          orientation, such as portrait or landscape, unless a specific display
+          orientation is essential.
+        examples:
+          - context: "General app"
+            description: "The app supports both portrait and landscape orientation, adapting layout responsively. Users with mounted devices in fixed orientation can use the app."
+          - context: "Essential exception"
+            description: "A check deposit feature requires landscape for check scanning — this is an essential restriction and is acceptable."
+        how_to_test:
+          - tool: "Device rotation"
+            steps:
+              - "Rotate device between portrait and landscape on every screen"
+              - "Verify content is accessible and usable in both orientations"
+              - "If a screen is locked to one orientation, verify it is essential"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Test accessibility in both orientations"
+              - "Verify no content is lost or inaccessible in either orientation"
+        common_fixes:
+          - platform: "Android"
+            fix: "Remove android:screenOrientation='portrait' from AndroidManifest.xml unless essential. Use responsive layouts (ConstraintLayout) that adapt to orientation changes. Handle configuration changes properly."
+          - platform: "iOS"
+            fix: "Support all orientations in Info.plist UISupportedInterfaceOrientations. Use Auto Layout constraints that adapt to both orientations. Override supportedInterfaceOrientations only when essential."
+
+      - id: "1.3.5"
+        title: "Identify Input Purpose"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          The purpose of each input field collecting information about the user
+          can be programmatically determined when the input field serves a
+          purpose identified in the list of input purposes (name, email, phone,
+          address, etc.) and the content is implemented using technologies with
+          support for identifying the expected meaning.
+        examples:
+          - context: "Android"
+            description: "EditText fields use appropriate android:autofillHints (e.g., 'emailAddress', 'postalCode', 'name') and android:inputType so autofill services can identify purpose."
+          - context: "iOS"
+            description: "UITextField fields use textContentType (e.g., .emailAddress, .postalCode, .name) enabling AutoFill and communicating purpose to assistive technology."
+        how_to_test:
+          - tool: "Autofill testing (Android)"
+            steps:
+              - "Enable autofill service (e.g., Google Autofill)"
+              - "Navigate to forms and verify autofill correctly identifies field purposes"
+              - "Check android:autofillHints in Layout Inspector"
+          - tool: "AutoFill testing (iOS)"
+            steps:
+              - "Verify QuickType suggestions appear correctly for form fields"
+              - "Verify textContentType is set appropriately"
+          - tool: "UIAutomator / Accessibility Inspector"
+            steps:
+              - "Inspect input fields for autofill hints and input type declarations"
+        common_fixes:
+          - platform: "Android"
+            fix: "Set android:autofillHints='emailAddress|username' and android:inputType='textEmailAddress' on relevant fields. Use HintConstants from autofill API."
+          - platform: "iOS"
+            fix: "Set textContentType (.emailAddress, .telephoneNumber, .streetAddressLine1, etc.) on UITextField/UITextView. Set keyboardType appropriately."
+
+      - id: "1.4.3"
+        title: "Contrast (Minimum)"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          The visual presentation of text and images of text in a view has a
+          contrast ratio of at least 4.5:1, except for large text (at least 3:1),
+          incidental text, and logotypes.
+        examples:
+          - context: "Body text"
+            description: "Body text (#333333) on white background (#FFFFFF) provides a contrast ratio of 12.6:1, exceeding the 4.5:1 minimum."
+          - context: "Large text"
+            description: "Heading text at 18sp+ or 14sp+ bold requires only 3:1 contrast ratio."
+          - context: "Failure"
+            description: "Light gray text (#999999) on white (#FFFFFF) has only 2.8:1 contrast and fails."
+        how_to_test:
+          - tool: "Accessibility Scanner (Android)"
+            steps:
+              - "Run scanner on each screen"
+              - "Review contrast ratio warnings for text elements"
+          - tool: "Xcode Accessibility Inspector (iOS)"
+            steps:
+              - "Use Color Contrast Calculator in the inspector"
+              - "Run audit for contrast issues"
+          - tool: "Manual testing"
+            steps:
+              - "Use color contrast analyzer tools on screenshots"
+              - "Verify text meets 4.5:1 (normal) or 3:1 (large) ratios"
+              - "Test in both light and dark modes"
+        common_fixes:
+          - platform: "Android"
+            fix: "Adjust text and background colors to meet contrast ratios. Use Material Design color system which provides accessible color pairings. Test with both light and dark themes."
+          - platform: "iOS"
+            fix: "Use system colors (UIColor.label, .secondaryLabel) which adapt to mode. Adjust custom colors to meet ratios. Verify in both light and dark mode."
+
+      - id: "1.4.4"
+        title: "Resize Text"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          Text in a view can be resized without assistive technology up to 200
+          percent without loss of content or functionality. On mobile, this means
+          the app must respect system font size settings (including large/extra
+          large font sizes) without clipping, truncating, or overlapping text.
+        examples:
+          - context: "Android"
+            description: "App uses sp (scale-independent pixels) for all text sizes and layouts accommodate text at 200% system font scale without truncation or overlap."
+          - context: "iOS"
+            description: "App uses Dynamic Type (UIFont.preferredFont) and layouts adapt to all accessibility text sizes without content loss."
+        how_to_test:
+          - tool: "System font size settings (Android)"
+            steps:
+              - "Go to Settings > Accessibility > Font size and set to largest"
+              - "Also check Display size setting at largest"
+              - "Navigate through all screens verifying text is not clipped or overlapping"
+              - "Verify all functionality remains available"
+          - tool: "System font size settings (iOS)"
+            steps:
+              - "Go to Settings > Accessibility > Display & Text Size > Larger Text"
+              - "Set to maximum size"
+              - "Navigate through all screens verifying layout adapts"
+              - "Verify no content loss or overlap"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use sp units for text. Use flexible layouts (ConstraintLayout with wrap_content/0dp). Avoid fixed-height containers for text. Test with font scale 2.0x. Use Autosizing TextViews where appropriate."
+          - platform: "iOS"
+            fix: "Use Dynamic Type (UIFont.preferredFont or UIFontMetrics). Use Auto Layout with flexible constraints. Implement traitCollectionDidChange to respond to size changes. Use adjustsFontForContentSizeCategory = true."
+
+      - id: "1.4.5"
+        title: "Images of Text"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          If the technologies being used can achieve the visual presentation,
+          text is used to convey information rather than images of text, except
+          when the image of text is essential (e.g., logotype) or can be
+          visually customized to the user's requirements.
+        examples:
+          - context: "Headings"
+            description: "Section headings use styled TextView/UILabel rather than image assets, allowing text to be resized, recolored, and read by screen readers."
+          - context: "Buttons"
+            description: "Button text is rendered as text (not an image of text), allowing scaling with system font size."
+          - context: "Acceptable exception"
+            description: "A brand logo containing text is an image but is acceptable as a logotype."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify any images that contain text (excluding logos)"
+              - "Verify text content is rendered using native text views rather than images"
+              - "Increase font size to verify text elements scale (images of text will not)"
+        common_fixes:
+          - platform: "Android"
+            fix: "Replace ImageViews containing text with styled TextViews. Use custom fonts (Typeface) and drawable backgrounds to achieve visual designs with real text."
+          - platform: "iOS"
+            fix: "Replace UIImageViews containing text with styled UILabels. Use custom fonts and layer styling to achieve visual designs with live text."
+
+      - id: "1.4.10"
+        title: "Reflow"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          Content can be presented without loss of information or functionality,
+          and without requiring scrolling in two dimensions, for vertical
+          scrolling content at a width equivalent to 320 CSS pixels, and for
+          horizontal scrolling content at a height equivalent to 256 CSS pixels
+          (except for parts of content that require two-dimensional layout for
+          usage or meaning, such as data tables, maps, or diagrams).
+        examples:
+          - context: "General app content"
+            description: "App content reflows to a single column when the viewport is narrow (e.g., small device or large text mode) without requiring horizontal scrolling."
+          - context: "Data table exception"
+            description: "A data table is exempt but should still provide some mechanism (horizontal scroll) to access all data."
+        how_to_test:
+          - tool: "Small device / Large text"
+            steps:
+              - "Test on smallest supported device width"
+              - "Increase font size to maximum"
+              - "Verify content does not require horizontal scrolling (except exempt content)"
+              - "Verify no content is clipped or lost"
+          - tool: "Manual review"
+            steps:
+              - "Check that layouts use responsive design that adapts to available width"
+              - "Verify no fixed-width layouts cause horizontal scrolling of text content"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use ConstraintLayout with percentage-based or wrap_content constraints. Avoid fixed dp widths for text containers. Use scrollable containers (ScrollView) for vertical scrolling only."
+          - platform: "iOS"
+            fix: "Use Auto Layout with priority-based constraints. Use UIScrollView for vertical scrolling. Ensure stack views and constraints adapt to content size changes."
+
+      - id: "1.4.11"
+        title: "Non-text Contrast"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          The visual presentation of UI components (their boundaries/states) and
+          graphical objects required to understand the content have a contrast
+          ratio of at least 3:1 against adjacent colors.
+        examples:
+          - context: "Button boundaries"
+            description: "A button's border or background contrasts at least 3:1 against the page background, making its boundaries perceivable."
+          - context: "Form field borders"
+            description: "Input field borders (#767676) on white background (#FFFFFF) have a 4.5:1 ratio, meeting the 3:1 minimum."
+          - context: "Icons"
+            description: "Meaningful icons (e.g., warning icon) contrast at least 3:1 against their background."
+          - context: "Focus indicator"
+            description: "The focus indicator/highlight contrasts at least 3:1 against adjacent colors."
+        how_to_test:
+          - tool: "Accessibility Scanner (Android)"
+            steps:
+              - "Run scanner and check for contrast issues on interactive components"
+          - tool: "Manual testing"
+            steps:
+              - "Check contrast of button borders, input field borders, toggle states, icons against adjacent colors"
+              - "Use color contrast analyzer on screenshots"
+              - "Verify in both light and dark modes"
+        common_fixes:
+          - platform: "Android"
+            fix: "Ensure custom drawable borders, icons, and state indicators have sufficient contrast. Use Material Design components which generally meet contrast requirements. Verify custom themes."
+          - platform: "iOS"
+            fix: "Ensure custom borders, tint colors, and icons meet 3:1 contrast. Use system colors that adapt to accessibility settings. Verify both light and dark appearances."
+
+      - id: "1.4.12"
+        title: "Text Spacing"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "If a mobile platform does not include a way for users to override text style properties, this success criterion is not applicable. However, when the platform does support text spacing customization, or when developers set text spacing, no loss of content or functionality should occur."
+        description: >
+          No loss of content or functionality occurs when users override text
+          spacing properties: line height to at least 1.5 times font size,
+          paragraph spacing to at least 2 times font size, letter spacing to at
+          least 0.12 times font size, and word spacing to at least 0.16 times
+          font size. If the mobile platform does not provide a way for users to
+          override these properties, this criterion may not be applicable.
+        examples:
+          - context: "Android"
+            description: "App layouts use flexible containers that accommodate increased line spacing and letter spacing without text being clipped or overlapping."
+          - context: "iOS"
+            description: "When users adjust text settings that affect spacing, app content remains visible and functional."
+        how_to_test:
+          - tool: "Developer testing"
+            steps:
+              - "Modify text spacing properties programmatically (line height 1.5x, letter spacing 0.12em)"
+              - "Verify no content is clipped, truncated, or overlapping"
+              - "Verify functionality is preserved"
+          - tool: "Manual review"
+            steps:
+              - "Check if platform supports user text spacing overrides"
+              - "If so, test with maximum spacing values"
+              - "If not, document as not applicable for that platform"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use flexible layout containers (wrap_content heights). Avoid fixed-height containers for text. Test with android:lineSpacingMultiplier='1.5' and android:letterSpacing='0.12'. Use ConstraintLayout with flexible constraints."
+          - platform: "iOS"
+            fix: "Use Auto Layout with flexible constraints. Avoid fixed-height text containers. Test with modified NSParagraphStyle (lineSpacing, paragraphSpacing) and NSKernAttributeName values."
+
+      - id: "1.4.13"
+        title: "Content on Hover or Focus"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          Where receiving and then removing pointer hover or keyboard focus
+          triggers additional content to become visible and then hidden, the
+          following are true: the additional content is dismissable (without
+          moving pointer/focus), hoverable (pointer can move to it), and
+          persistent (remains until dismissed, hover/focus removed, or no longer
+          valid).
+        examples:
+          - context: "Tooltip on long-press"
+            description: "A tooltip shown on long-press or hover (stylus/mouse input) remains visible until user taps elsewhere, can be dismissed without moving focus, and content within is accessible."
+          - context: "Popup info"
+            description: "A popup explanation triggered by focus on a help icon is dismissable via Back/Escape and persists while help icon has focus."
+        how_to_test:
+          - tool: "Manual testing with mouse/stylus"
+            steps:
+              - "Hover over elements that trigger additional content"
+              - "Verify content is dismissable (Escape/Back), hoverable (mouse can move to it), and persistent"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Focus on elements that trigger additional content"
+              - "Verify the additional content is accessible and dismissable"
+        common_fixes:
+          - platform: "Android"
+            fix: "Ensure PopupWindow/TooltipCompat content is dismissable via Back button, persists while trigger has focus, and can be reached by pointer. Use standard tooltip patterns."
+          - platform: "iOS"
+            fix: "Ensure popovers and tooltips are dismissable, persistent, and hoverable. Use UIPopoverPresentationController with appropriate behavior. Support accessibilityPerformEscape."
+
+      - id: "2.4.5"
+        title: "Multiple Ways"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          More than one way is available to locate a screen within a set of
+          screens, except where the screen is the result of or a step in a
+          process.
+        examples:
+          - context: "Navigation options"
+            description: "Users can reach screens via bottom navigation tabs AND a search function, or via navigation drawer AND a sitemap/index screen."
+          - context: "Process exception"
+            description: "Step 2 of a checkout flow only being accessible from Step 1 is acceptable."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "For each major screen, verify at least two navigation methods exist (e.g., menu + search, tabs + direct link)"
+              - "Check that search, navigation drawer/tabs, and any sitemap/index are available"
+        common_fixes:
+          - platform: "Android"
+            fix: "Implement multiple navigation paths: bottom navigation + search, navigation drawer + deep links. Provide in-app search functionality."
+          - platform: "iOS"
+            fix: "Implement multiple navigation paths: tab bar + search, navigation hierarchy + Spotlight integration. Use UISearchController."
+
+      - id: "2.4.6"
+        title: "Headings and Labels"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          Headings and labels in a view describe the topic or purpose. Labels
+          and headings used in the app must be descriptive and help users
+          understand the content structure.
+        examples:
+          - context: "Screen sections"
+            description: "A settings screen uses headings like 'Account Settings', 'Notification Preferences', 'Privacy' rather than 'Section 1', 'Section 2'."
+          - context: "Form labels"
+            description: "Form fields use descriptive labels like 'Email Address' rather than just 'Input 1'."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Review all headings and labels in the app"
+              - "Verify they describe topic or purpose"
+              - "Verify headings are not empty or generic"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Navigate by headings and verify each is descriptive"
+              - "Focus on form fields and verify labels are meaningful"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use descriptive strings for all headings and labels. Review string resources for clarity. Avoid generic labels like 'Click here' or 'Item'."
+          - platform: "iOS"
+            fix: "Use descriptive text for all section headers and form labels. Ensure accessibilityLabel values are descriptive when set."
+
+      - id: "2.4.7"
+        title: "Focus Visible"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          Any keyboard-operable user interface in a view has a mode of operation
+          where the keyboard focus indicator is visible. On mobile, this applies
+          when using external keyboards, Switch Access, or TalkBack/VoiceOver
+          focus indicators.
+        examples:
+          - context: "External keyboard navigation"
+            description: "When navigating with an external keyboard, focused elements show a visible outline/highlight that is clearly distinguishable from unfocused state."
+          - context: "TalkBack focus"
+            description: "TalkBack's green focus rectangle is visible on the currently focused element. Custom views do not hide or obscure this indicator."
+        how_to_test:
+          - tool: "External keyboard"
+            steps:
+              - "Connect external keyboard and Tab through elements"
+              - "Verify focus indicator is visible on every focusable element"
+              - "Verify focus is not hidden behind other content"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Verify focus indicator rectangle is visible on focused elements"
+              - "Verify custom views don't prevent focus indicator display"
+          - tool: "Switch Access/Switch Control"
+            steps:
+              - "Verify scanning highlight is visible on each element"
+        common_fixes:
+          - platform: "Android"
+            fix: "Do not suppress default focus indicators. Use state_focused drawable states in selectors. Ensure custom views support focused state visually. Do not set focusable=false on interactive elements."
+          - platform: "iOS"
+            fix: "Do not suppress focus indicators. For custom controls, implement UIFocusEnvironment protocol properly. Ensure focusEffect is visible. Support iOS keyboard focus system."
+
+      - id: "2.4.11"
+        title: "Focus Not Obscured (Minimum)"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          When a user interface component receives keyboard focus, the component
+          is not entirely hidden due to author-created content. At least part of
+          the focus indicator is visible (not completely obscured by sticky
+          headers, footers, modals, or overlapping content).
+        examples:
+          - context: "Sticky header"
+            description: "When a user tabs to an element behind a sticky toolbar, the view scrolls to ensure the focused element is not completely hidden behind the toolbar."
+          - context: "Cookie/consent banner"
+            description: "A bottom consent banner does not completely obscure focused elements. The page scrolls or the banner is dismissible before focus moves behind it."
+          - context: "Chat widget"
+            description: "A floating chat button does not completely cover the currently focused form field."
+        how_to_test:
+          - tool: "External keyboard"
+            steps:
+              - "Tab through all elements while sticky headers/footers/banners are visible"
+              - "Verify no focused element is entirely hidden by overlapping content"
+              - "Verify at least part of the focused element is visible"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Navigate through elements and verify focused items are at least partially visible on screen"
+        common_fixes:
+          - platform: "Android"
+            fix: "Account for toolbar/bottom bar heights in scroll calculations. Use CoordinatorLayout behaviors to ensure focused content scrolls into view. Use WindowInsets to avoid overlapping system UI."
+          - platform: "iOS"
+            fix: "Adjust contentInset and scrollIndicatorInsets for sticky elements. Use scrollRectToVisible or UIScrollView.scrollToItem to ensure focused content is visible. Account for safe areas."
+
+      - id: "2.5.7"
+        title: "Dragging Movements"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          All functionality that uses a dragging movement for operation can be
+          achieved by a single pointer without dragging, unless dragging is
+          essential or the functionality is determined by the user agent or
+          platform software and not modified by the author.
+        examples:
+          - context: "Reorderable list"
+            description: "A list that supports drag-to-reorder also provides move up/down buttons (visible on long-press or edit mode) as a non-dragging alternative."
+          - context: "Slider"
+            description: "A custom slider that uses dragging also supports tap-to-set-value at the tapped position, or provides increment/decrement buttons."
+          - context: "Map pin placement"
+            description: "A map that allows dragging a pin also provides a text input for coordinates or a tap-to-place alternative."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all drag-based interactions (reorder, slider, map manipulation, drag-and-drop)"
+              - "Verify each has a single-pointer non-dragging alternative"
+              - "Test alternatives with TalkBack/VoiceOver to ensure accessibility"
+          - tool: "Switch Access/Switch Control"
+            steps:
+              - "Verify drag-based functionality is achievable without drag gestures"
+        common_fixes:
+          - platform: "Android"
+            fix: "For reorderable lists: add move up/down actions in AccessibilityNodeInfo custom actions. For sliders: use standard SeekBar/Slider which provides accessible increment/decrement. Add alternative action buttons."
+          - platform: "iOS"
+            fix: "For reorderable lists: implement accessibilityCustomActions for move up/down. For sliders: use standard UISlider which VoiceOver can increment/decrement. Add alternative button controls."
+
+      - id: "2.5.8"
+        title: "Target Size (Minimum)"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          The size of the target for pointer inputs is at least 24 by 24 CSS
+          pixels, except when: the target size is determined by the user agent
+          or platform, there is an equivalent larger target, the target is
+          inline, the author has not modified the size/spacing, or the
+          presentation is essential.
+        examples:
+          - context: "Buttons"
+            description: "All tap targets (buttons, icons, links) are at least 24x24dp (Android) or 24x24pt (iOS), with recommended size of 48x48dp for optimal touch accessibility."
+          - context: "Close button"
+            description: "A small 'X' close button has a minimum 24x24dp touch area (with padding expanding the target area if the visual element is smaller)."
+          - context: "Inline links"
+            description: "Text links within a paragraph are exempt from the 24x24 minimum, but surrounding spacing provides adequate separation."
+        how_to_test:
+          - tool: "Accessibility Scanner (Android)"
+            steps:
+              - "Run scanner and check for 'Touch target size' warnings"
+              - "Verify targets that fail are at least 24x24dp"
+          - tool: "Layout Inspector (Android) / View Debugger (iOS)"
+            steps:
+              - "Inspect touch target bounds of all interactive elements"
+              - "Verify minimum 24x24dp/pt dimensions"
+          - tool: "Manual testing"
+            steps:
+              - "Attempt to tap small targets"
+              - "Verify all targets are comfortably tappable"
+        common_fixes:
+          - platform: "Android"
+            fix: "Set minimum dimensions: android:minWidth='24dp' android:minHeight='24dp' (48dp recommended). Use padding or TouchDelegate to expand touch area beyond visible bounds."
+          - platform: "iOS"
+            fix: "Override point(inside:with:) to expand hit area, or ensure frame is at least 24x24pt (44x44pt recommended). Use contentEdgeInsets to expand touch area."
+
+      - id: "3.1.2"
+        title: "Language of Parts"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          The human language of each passage or phrase in a view can be
+          programmatically determined, except for proper names, technical terms,
+          words of indeterminate language, and words that have become part of
+          the vernacular.
+        examples:
+          - context: "Android"
+            description: "A quote in French within English app content uses LocaleSpan to mark the French text, enabling TalkBack to switch TTS voice for accurate pronunciation."
+          - context: "iOS"
+            description: "A UILabel containing a Spanish phrase within English text sets accessibilityLanguage on a sub-element, or uses NSAttributedString with language attribute."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Navigate to content with mixed languages"
+              - "Verify TalkBack uses appropriate language pronunciation for foreign language passages"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Navigate to mixed-language content"
+              - "Verify VoiceOver switches language for foreign passages"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use LocaleSpan in SpannableString for inline language changes. For separate views, set locale on AccessibilityNodeInfo."
+          - platform: "iOS"
+            fix: "Set accessibilityLanguage on elements with different language. Use NSAttributedString with .languageIdentifier key for inline changes (iOS 17+). Split foreign text into separate accessible elements with language set."
+
+      - id: "3.2.3"
+        title: "Consistent Navigation"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          Navigational mechanisms that are repeated on multiple screens within a
+          set of screens occur in the same relative order each time they are
+          repeated, unless a change is initiated by the user.
+        examples:
+          - context: "Bottom navigation"
+            description: "The bottom navigation bar maintains the same tab order (Home, Search, Cart, Profile) across all screens where it appears."
+          - context: "Toolbar actions"
+            description: "Toolbar icons (search, notifications, settings) appear in the same order on all screens that include them."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Navigate through multiple screens with repeated navigation elements"
+              - "Verify tab bars, toolbars, and navigation menus maintain consistent ordering"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Navigate repeated elements across screens"
+              - "Verify same order is maintained"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use shared navigation components (BottomNavigationView, Toolbar) defined in a base Activity or with Navigation Component. Maintain consistent menu item ordering."
+          - platform: "iOS"
+            fix: "Use shared UITabBarController with consistent tab order. Use consistent navigation bar button items. Define navigation components centrally."
+
+      - id: "3.2.4"
+        title: "Consistent Identification"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: null
+        description: >
+          Components that have the same functionality within a set of screens
+          are identified consistently (same labels, names, and accessible
+          descriptions).
+        examples:
+          - context: "Search icon"
+            description: "The search icon is labeled 'Search' consistently across all screens, not 'Search' on one screen and 'Find' on another."
+          - context: "Delete action"
+            description: "The delete action uses the same icon and label ('Delete') throughout the app, not 'Delete' in one place and 'Remove' in another."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify components with same functionality across screens (search, settings, close, submit)"
+              - "Verify they use consistent labels, icons, and accessible names"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Navigate repeated functional elements across screens"
+              - "Verify consistent announcements"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use shared string resources for common actions. Create reusable custom views or menu items with consistent contentDescription. Maintain a design system with standard labeling."
+          - platform: "iOS"
+            fix: "Use shared string constants for common action labels. Create reusable UI components with consistent accessibilityLabel. Maintain design system consistency."
+
+      - id: "3.3.3"
+        title: "Error Suggestion"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          If an input error is automatically detected in a view and suggestions
+          for correction are known, then the suggestions are provided to the
+          user, unless it would jeopardize the security or purpose of the
+          content.
+        examples:
+          - context: "Email format"
+            description: "When an invalid email is entered, the error message reads 'Please enter a valid email address (e.g., name@example.com)' rather than just 'Invalid input'."
+          - context: "Date format"
+            description: "When a date is entered incorrectly, the app suggests 'Please enter date in MM/DD/YYYY format' with an example."
+          - context: "Password requirements"
+            description: "When a password fails validation, specific unmet requirements are listed: 'Password must include at least one uppercase letter and one number.'"
+        how_to_test:
+          - tool: "Manual testing"
+            steps:
+              - "Enter invalid data in form fields throughout the app"
+              - "Verify error messages include specific correction suggestions"
+              - "Verify suggestions are announced by TalkBack/VoiceOver"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Trigger validation errors"
+              - "Verify suggestions are read as part of error messages"
+        common_fixes:
+          - platform: "Android"
+            fix: "Include specific suggestions in TextInputLayout.setError() messages. Format suggestions clearly: 'Error: Invalid date. Please use format MM/DD/YYYY'. Ensure error text is accessible."
+          - platform: "iOS"
+            fix: "Include suggestions in error label text. Update accessibilityLabel or use accessibilityValue to communicate suggestions. Provide example formats in error messages."
+
+      - id: "3.3.4"
+        title: "Error Prevention (Legal, Financial, Data)"
+        level: "AA"
+        mobile_applicability: "applies_directly"
+        mobile_note: null
+        description: >
+          For views that cause legal commitments or financial transactions, that
+          modify or delete user-controllable data, or that submit test responses,
+          at least one of the following is true: submissions are reversible,
+          data is checked and user can correct, or a mechanism to review/confirm
+          before finalizing is provided.
+        examples:
+          - context: "Purchase confirmation"
+            description: "Before finalizing a purchase, a review screen shows all order details with a 'Confirm Order' button. Users can go back to edit."
+          - context: "Account deletion"
+            description: "Deleting an account requires confirmation dialog: 'Are you sure? This action cannot be undone.' with Cancel and Delete options."
+          - context: "Data modification"
+            description: "Editing profile information shows a confirmation dialog or provides an undo option after saving."
+        how_to_test:
+          - tool: "Manual review"
+            steps:
+              - "Identify all legal, financial, or data-modification actions"
+              - "Verify a review/confirm step exists before finalization"
+              - "Verify user can go back and correct information"
+              - "Test that confirmation dialogs are accessible"
+          - tool: "TalkBack/VoiceOver"
+            steps:
+              - "Complete financial/legal processes"
+              - "Verify review screens and confirmation dialogs are accessible"
+        common_fixes:
+          - platform: "Android"
+            fix: "Add confirmation step (review screen or AlertDialog) before irreversible actions. Implement undo with Snackbar for data deletion. Use two-step confirmation for financial transactions."
+          - platform: "iOS"
+            fix: "Present confirmation UIAlertController before irreversible actions. Use destructive action style for dangerous actions. Implement undo. Add review screen before submission."
+
+      - id: "3.3.8"
+        title: "Accessible Authentication (Minimum)"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "Examples of mechanisms include support for password entry by password managers and copy-paste functionality. On mobile platforms, this means supporting AutoFill services, biometric authentication, and paste functionality in password fields."
+        description: >
+          A cognitive function test (such as remembering a password or solving a
+          puzzle) is not required for any step in an authentication process
+          unless that step provides at least one of: an alternative method, a
+          mechanism to help the user complete the test (such as copy-paste or
+          password manager support), or the test is about recognizing objects or
+          personal content.
+        examples:
+          - context: "Password fields with autofill"
+            description: "Password input fields support autofill (password managers) and allow paste operations so users don't need to memorize passwords."
+          - context: "Biometric option"
+            description: "The app provides fingerprint/face authentication as an alternative to typing a password."
+          - context: "CAPTCHA alternative"
+            description: "If a CAPTCHA is required, an alternative method (audio CAPTCHA, email verification) is provided."
+        how_to_test:
+          - tool: "Manual testing (Android)"
+            steps:
+              - "Verify password fields support autofill (autofillHints set)"
+              - "Verify paste is not disabled on password fields"
+              - "Check for biometric authentication option"
+              - "Test that password managers can fill login fields"
+          - tool: "Manual testing (iOS)"
+            steps:
+              - "Verify password fields support Password AutoFill (textContentType = .password)"
+              - "Verify paste is enabled on password fields"
+              - "Check for biometric authentication option (Face ID/Touch ID)"
+              - "Test keychain integration"
+        common_fixes:
+          - platform: "Android"
+            fix: "Set android:autofillHints='password' on password fields. Do not disable paste (avoid setLongClickable(false) on password fields). Implement BiometricPrompt as alternative authentication. Support Credential Manager API."
+          - platform: "iOS"
+            fix: "Set textContentType = .password on password fields. Do not override paste: to prevent pasting. Implement LAContext (biometric authentication) as alternative. Enable Keychain/Password AutoFill."
+
+      - id: "4.1.3"
+        title: "Status Messages"
+        level: "AA"
+        mobile_applicability: "applies_with_substitutions"
+        mobile_note: "Remove 'implemented using markup languages' qualifier — this criterion applies to all mobile content regardless of implementation technology. Status messages must be programmatically determinable through role or properties so they can be presented by assistive technology without receiving focus."
+        description: >
+          In content, status messages can be programmatically determined through
+          role or properties such that they can be presented to the user by
+          assistive technologies without receiving focus. On mobile, this means
+          using accessibility announcements or live region equivalents to convey
+          status updates, errors, loading states, and confirmations to screen
+          reader users.
+        examples:
+          - context: "Android - Toast/Snackbar"
+            description: "A Snackbar message ('Item added to cart') is automatically announced by TalkBack because Snackbar uses accessibilityLiveRegion."
+          - context: "Android - Custom status"
+            description: "A loading indicator uses View.announceForAccessibility('Loading content') or sets accessibilityLiveRegion = POLITE on a status TextView."
+          - context: "iOS - Status update"
+            description: "After a form submission, UIAccessibility.post(notification: .announcement, argument: 'Form submitted successfully') announces the status."
+          - context: "Search results"
+            description: "After search completes, '15 results found' is announced without moving focus from the search field."
+        how_to_test:
+          - tool: "TalkBack (Android)"
+            steps:
+              - "Trigger actions that produce status messages (form submission, loading, errors, cart updates)"
+              - "Verify TalkBack announces the status without focus moving away"
+              - "Verify polite/assertive announcements are appropriate for message urgency"
+          - tool: "VoiceOver (iOS)"
+            steps:
+              - "Trigger status-producing actions"
+              - "Verify VoiceOver announces status messages"
+              - "Verify focus does not move unexpectedly"
+        common_fixes:
+          - platform: "Android"
+            fix: "Use View.setAccessibilityLiveRegion(POLITE) on status text views. Use View.announceForAccessibility() for transient messages. Snackbar already handles this. For custom views, fire TYPE_ANNOUNCEMENT AccessibilityEvent."
+          - platform: "iOS"
+            fix: "Use UIAccessibility.post(notification: .announcement, argument: message) for status messages. Use .screenChanged only when screen content significantly changes. Set accessibilityTraits to .updatesFrequently for live data."
+
+# Metadata
+metadata:
+  total_criteria: 55
+  level_a_count: 31
+  level_aa_count: 24
+  removed_criteria:
+    - id: "4.1.1"
+      title: "Parsing"
+      reason: "Obsolete in WCAG 2.2; removed from WCAG2Mobile scope"
+  excluded_levels:
+    - "AAA"
+  platforms_covered:
+    - "Android (native)"
+    - "iOS (native)"
+    - "Flutter"
+    - "React Native (where applicable)"
+  testing_tools_referenced:
+    - "TalkBack"
+    - "VoiceOver"
+    - "Switch Access"
+    - "Switch Control"
+    - "Voice Access"
+    - "Voice Control"
+    - "Accessibility Scanner (Android)"
+    - "Xcode Accessibility Inspector"
+    - "UIAutomator"
+    - "Layout Inspector"
+    - "External Keyboard"
+  
