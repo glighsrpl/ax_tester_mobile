@@ -76,7 +76,7 @@ def _build_file_metadata(report_id: str, file_type: str, report_dir: Path | None
         "file_type": spec.file_type,
         "filename": spec.filename,
         "mime_type": spec.mime_type,
-        "uri": f"ax-tester://reports/{_validate_report_id(report_id)}/{spec.filename}",
+        "uri": f"ax-tester-mobile://reports/{_validate_report_id(report_id)}/{spec.filename}",
         "size_bytes": file_path.stat().st_size if file_path.exists() else None,
     }
 
