@@ -2,7 +2,7 @@
 
 Tools exposed:
 - run_full_mobile_test(...): run the mobile accessibility test flow.
-- get_report_file(report_id, file_type): retrieve a saved JSON, PowerPoint, or Excel report file.
+- get_mobile_report_file(report_id, file_type): retrieve a saved JSON, PowerPoint, or Excel report file.
 """
 
 # ruff: noqa: E402
@@ -32,6 +32,7 @@ from tools.mobile_saver_tool import run_save_mobile
 from utils.mobile_capabilities import discover_mobile_capabilities
 from utils.mobile_session import MOBILE_SESSION
 from utils.report_store import (
+    REPORT_FILE_SPECS,
     build_report_manifest,
     get_report_file_metadata,
     get_report_file_spec,
@@ -49,6 +50,12 @@ mcp = FastMCP(
         enable_dns_rebinding_protection=False,
     ),
 )
+
+REPORT_RESOURCE_URIS = {
+    "json": "ax-tester-mobile://reports/{report_id}/ax_report.json",
+    "powerpoint": "ax-tester-mobile://reports/{report_id}/ax_report.pptx",
+    "excel": "ax-tester-mobile://reports/{report_id}/ax_report.xlsx",
+}
 
 
 @dataclass
@@ -252,6 +259,36 @@ def _build_mobile_scan_result(bridge_result: dict[str, Any]) -> mcp_types.CallTo
 
 
 ReportFileType = Literal["json", "powerpoint", "excel"]
+
+
+def _read_report_resource(report_id: str, file_type: ReportFileType) -> bytes:
+    content, _ = read_report_file(report_id, file_type)
+    return content
+
+
+# --- MCP RESOURCES ---
+@mcp.resource(REPORT_RESOURCE_URIS["json"], mime_type=REPORT_FILE_SPECS["json"].mime_type)
+def report_json_resource(report_id: str) -> str:
+    """Read a saved JSON report resource."""
+    return _read_report_resource(report_id, "json").decode("utf-8")
+
+
+@mcp.resource(
+    REPORT_RESOURCE_URIS["powerpoint"],
+    mime_type=REPORT_FILE_SPECS["powerpoint"].mime_type,
+)
+def report_powerpoint_resource(report_id: str) -> bytes:
+    """Read a saved PowerPoint report resource."""
+    return _read_report_resource(report_id, "powerpoint")
+
+
+@mcp.resource(
+    REPORT_RESOURCE_URIS["excel"],
+    mime_type=REPORT_FILE_SPECS["excel"].mime_type,
+)
+def report_excel_resource(report_id: str) -> bytes:
+    """Read a saved Excel report resource."""
+    return _read_report_resource(report_id, "excel")
 
 
 # --- MCP TOOLS ---
