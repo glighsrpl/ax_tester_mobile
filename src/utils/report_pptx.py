@@ -924,7 +924,7 @@ def _is_http_url(value: str) -> bool:
 
 
 def _download_issue_image_from_url(url: str) -> tuple[bytes, str]:
-    request = Request(url, headers={"User-Agent": "ax-tester/1.0"})
+    request = Request(url, headers={"User-Agent": "ax-tester-mobile/1.0"})
     with urlopen(request, timeout=ISSUE_IMAGE_DOWNLOAD_TIMEOUT) as response:
         content_type = response.headers.get("Content-Type", "")
         image_bytes = response.read(ISSUE_IMAGE_MAX_BYTES + 1)
