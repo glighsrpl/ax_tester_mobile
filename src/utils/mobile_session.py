@@ -29,13 +29,6 @@ MOBILE_NEW_COMMAND_TIMEOUT_SECONDS = 300
 MOBILE_ACTION_DELAY_MS = 500
 ANDROID_KEYCODES = {
     "back": 4,
-    "tab": 61,
-    "enter": 66,
-    "dpad_up": 19,
-    "dpad_down": 20,
-    "dpad_left": 21,
-    "dpad_right": 22,
-    "dpad_center": 23,
 }
 
 _RUN_LOGS_DIR: Path | None = None
@@ -212,27 +205,6 @@ class MobileSession:
 
     async def back(self) -> None:
         await self.press_key("back")
-
-    async def press_tab(self) -> None:
-        await self.press_key("tab")
-
-    async def press_enter(self) -> None:
-        await self.press_key("enter")
-
-    async def press_dpad_up(self) -> None:
-        await self.press_key("dpad_up")
-
-    async def press_dpad_down(self) -> None:
-        await self.press_key("dpad_down")
-
-    async def press_dpad_left(self) -> None:
-        await self.press_key("dpad_left")
-
-    async def press_dpad_right(self) -> None:
-        await self.press_key("dpad_right")
-
-    async def press_dpad_center(self) -> None:
-        await self.press_key("dpad_center")
 
     #################################################################
 

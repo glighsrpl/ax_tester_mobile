@@ -34,8 +34,6 @@ class MobileScanSnapshot:
     screenshot: str
     elements: list[MobileElementInfo]
     snapshot_id: str = field(default_factory=lambda: str(uuid4()))
-    navigation_path: tuple[str, ...] = ()
-    tree_path: str | None = None
 
 
 @dataclass(frozen=True)
@@ -61,15 +59,6 @@ class MobileScreenNavigationResult:
             "path": list(self.path),
             "steps": self.steps,
             "app_package": self.app_package,
-            "screen_context": [
-                {
-                    "snapshot_id": snapshot.snapshot_id,
-                    "activity_name": snapshot.activity,
-                    "screenshot_path": self.snapshot_screenshots.get(snapshot.snapshot_id),
-                    "tree_path": snapshot.tree_path,
-                }
-                for snapshot in self.snapshots
-            ],
             "snapshots": [asdict(snapshot) for snapshot in self.snapshots],
         }
 
@@ -739,14 +728,12 @@ class MobileScreenNavigator:
         tree = await MOBILE_SESSION.get_accessibility_tree()
         screenshot = await MOBILE_SESSION.take_screenshot()
         activity = await MOBILE_SESSION.get_current_activity()
-        tree_path = self._save_tree_snapshot(tree)
+        self._save_tree_snapshot(tree)
         return MobileScanSnapshot(
             activity=activity,
             tree_xml=tree,
             screenshot=screenshot,
             elements=parse_mobile_tree(tree, page_screenshot=screenshot),
-            navigation_path=tuple(self._path),
-            tree_path=tree_path,
         )
 
     def _save_tree_snapshot(self, tree: str) -> str:

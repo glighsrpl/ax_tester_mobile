@@ -58,11 +58,6 @@ def get_interactive_elements(elements: list[MobileElementInfo]) -> list[MobileEl
     return [element for element in elements if element.enabled and element.bounds and element.is_interactive()]
 
 
-def compact_mobile_tree(elements: list[MobileElementInfo], *, interactive_only: bool = False) -> str:
-    rows = get_interactive_elements(elements) if interactive_only else elements
-    return "\n".join(_compact_row(element) for element in rows)
-
-
 def bounds_center(bounds: str) -> tuple[int, int]:
     left, top, right, bottom = _parse_bounds(bounds)
     return (left + right) // 2, (top + bottom) // 2
@@ -71,28 +66,6 @@ def bounds_center(bounds: str) -> tuple[int, int]:
 def bounds_size(bounds: str) -> tuple[int, int]:
     left, top, right, bottom = _parse_bounds(bounds)
     return right - left, bottom - top
-
-
-def _compact_row(element: MobileElementInfo) -> str:
-    label = element.get_label()
-    flags = "".join(
-        flag
-        for flag, enabled in (
-            ("C", element.clickable),
-            ("F", element.focusable),
-            ("E", element.enabled),
-            ("S", element.selected),
-            ("K", element.checked),
-        )
-        if enabled
-    )
-    return (
-        f"{element.index}: {element.class_name or '-'}"
-        f" id={element.resource_id or '-'}"
-        f" label={label or '-'}"
-        f" bounds={element.bounds or '-'}"
-        f" flags={flags or '-'}"
-    )
 
 
 def _attr(node: ElementTree.Element, *names: str) -> str | None:
