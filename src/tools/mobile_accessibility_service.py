@@ -52,7 +52,6 @@ class MobileAccessibilityScanRequest:
 class MobileAccessibilityScanResult:
     """Artifacts produced by one touch-navigation accessibility scan."""
 
-    report_id: str
     navigator_data: dict[str, object]
     static_results: dict[str, object]
     static_debug_data: list[dict[str, object]]
@@ -110,7 +109,6 @@ async def _collect_and_analyze(
         for activity, issues in static_analysis.issues_by_activity.items()
     }
     return MobileAccessibilityScanResult(
-        report_id=report_id,
         navigator_data=navigator_data,
         static_results=static_results,
         static_debug_data=static_analysis.debug_data,
