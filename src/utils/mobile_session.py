@@ -12,6 +12,8 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+from utils.helpers import sanitize_label
+
 logger = logging.getLogger(__name__)
 
 APPIUM_SERVER_URL_ENV = "APPIUM_SERVER_URL"
@@ -29,13 +31,6 @@ MOBILE_NEW_COMMAND_TIMEOUT_SECONDS = 300
 MOBILE_ACTION_DELAY_MS = 500
 ANDROID_KEYCODES = {
     "back": 4,
-    "tab": 61,
-    "enter": 66,
-    "dpad_up": 19,
-    "dpad_down": 20,
-    "dpad_left": 21,
-    "dpad_right": 22,
-    "dpad_center": 23,
 }
 
 _RUN_LOGS_DIR: Path | None = None
@@ -49,9 +44,7 @@ def _project_root() -> Path:
 def _create_mobile_run_logs_dir(app_package: str | None = None) -> Path:
     logs_dir = _project_root() / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    package_label = "".join(
-        char if char.isalnum() or char in "._-" else "_" for char in app_package or "mobile"
-    ).strip("._-")
+    package_label = sanitize_label(app_package or "mobile") or "mobile"
     run_name = f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{package_label or 'mobile'}"
     run_logs_dir = logs_dir / run_name
     suffix = 1
@@ -212,27 +205,6 @@ class MobileSession:
 
     async def back(self) -> None:
         await self.press_key("back")
-
-    async def press_tab(self) -> None:
-        await self.press_key("tab")
-
-    async def press_enter(self) -> None:
-        await self.press_key("enter")
-
-    async def press_dpad_up(self) -> None:
-        await self.press_key("dpad_up")
-
-    async def press_dpad_down(self) -> None:
-        await self.press_key("dpad_down")
-
-    async def press_dpad_left(self) -> None:
-        await self.press_key("dpad_left")
-
-    async def press_dpad_right(self) -> None:
-        await self.press_key("dpad_right")
-
-    async def press_dpad_center(self) -> None:
-        await self.press_key("dpad_center")
 
     #################################################################
 

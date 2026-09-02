@@ -31,7 +31,6 @@ def build_static_debug_payload(snapshot_payload: dict[str, object]) -> dict[str,
             "payload_chars": len(str(snapshot_payload)),
             "element_count": len(elements) if isinstance(elements, list) else 0,
             "has_screenshot": "screenshot" in str(snapshot_payload).lower(),
-            "has_tree_xml": "tree_xml" in snapshot_payload,
         },
     }
 
