@@ -28,7 +28,7 @@ DEFAULT_SCREENSHOT_REPORTS_DIR = Path("/tmp/mobile_reports")
 
 @dataclass(frozen=True)
 class MobileScanSnapshot:
-    """One captured mobile screen and the navigation path that reached it."""
+    """One captured mobile screen."""
 
     activity: str
     tree_xml: str
@@ -66,6 +66,8 @@ class MobileScreenNavigationResult:
 
 class MobileScreenNavigator:
     """Navigate mobile screens and collect scan snapshots."""
+
+    # ── Public API ──
 
     def __init__(self, config: dict[str, Any] | None = None):
         config = config or {}
@@ -119,6 +121,8 @@ class MobileScreenNavigator:
                 navigation_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await navigation_task
+
+    # ── BFS Navigation ──
 
     async def _navigate(
         self,
@@ -333,6 +337,8 @@ class MobileScreenNavigator:
             return None
         return drawer_snapshot, action, bounds
 
+    # ── Exploration ──
+
     async def _scan_vertical(
         self,
         snapshot: MobileScanSnapshot,
@@ -386,7 +392,6 @@ class MobileScreenNavigator:
             if tree_hash != parent_hash:
                 screen_edges.setdefault(tree_hash, (parent_hash, "scroll_down", ""))
 
-        # Scan horizontal containers after vertical scanning is complete
         stop, tree_hash = await self._scan_horizontal(
             horizontal_containers,
             current_hash=tree_hash,
@@ -474,6 +479,8 @@ class MobileScreenNavigator:
 
         return False, current_hash
 
+    # ── Snapshot Collection ──
+
     def _process_snapshot(
         self,
         snapshot: MobileScanSnapshot,
@@ -508,6 +515,8 @@ class MobileScreenNavigator:
         for element in get_interactive_elements(new_elements):
             if element.clickable and not is_in_place_control(element):
                 navigation_targets.append((element.bounds or "", tree_hash, depth + 1))
+
+    # ── BFS Navigation ──
 
     async def _restore_screen(
         self,
@@ -582,6 +591,8 @@ class MobileScreenNavigator:
 
         return True, current_hash
 
+    # ── Utilities ──
+
     def _record_activity(self, snapshot: MobileScanSnapshot, activity_limit: int) -> bool:
         activity = self._activity_name(snapshot)
         if activity in self._seen_activities:
@@ -632,6 +643,8 @@ class MobileScreenNavigator:
                 containers.add((resource_id, bounds))
         return containers
 
+    # ── Public API ──
+
     def result(self) -> dict[str, Any]:
         page_screenshot = self._snapshot_screenshots.get(self._page_screenshot_id or "")
         activity_screenshots = {
@@ -648,6 +661,8 @@ class MobileScreenNavigator:
             steps=self._step,
             app_package=str(self.target_app_package) if self.target_app_package else None,
         ).as_dict()
+
+    # ── Snapshot Collection ──
 
     def _persist_screenshot(
         self,
@@ -699,9 +714,13 @@ class MobileScreenNavigator:
         self._snapshots.append(snapshot)
         self._snapshot_queue.put_nowait(snapshot)
 
+    # ── BFS Navigation ──
+
     async def _ensure_scope(self, target_app_package: str | None) -> None:
         if target_app_package and await MOBILE_SESSION.get_current_package() != target_app_package:
             raise RuntimeError(f"Mobile scan left target package {target_app_package}.")
+
+    # ── Snapshot Collection ──
 
     async def _snapshot(self) -> MobileScanSnapshot:
         self._snapshot_index += 1
@@ -721,6 +740,8 @@ class MobileScreenNavigator:
         path = get_mobile_run_logs_dir() / f"mobile_tree_{self._snapshot_index:04d}.xml"
         path.write_text(self._format_tree_snapshot(tree), encoding="utf-8")
         return str(path)
+
+    # ── Utilities ──
 
     async def _scroll_down(self) -> None:
         await MOBILE_SESSION.scroll_down()

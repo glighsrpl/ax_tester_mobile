@@ -10,6 +10,7 @@ from utils.helpers import sanitize_label
 from utils.mobile_pipeline import (
     ActivityReports,
     MobileStaticAnalyzer,
+    StaticAnalysisResult,
     run_mobile_pipeline,
 )
 from utils.mobile_report import save_source_reports
@@ -69,7 +70,7 @@ async def run_mobile_accessibility_scan(
         request.app_activity,
     ) as session:
         initial_tree_xml = await _require_accessibility_tree(session, request.capability_id)
-        return await _collect_and_analyze(request, initial_tree_xml)
+        return await _run_scan_pipeline(request, initial_tree_xml)
 
 
 async def _require_accessibility_tree(session: MobileSession, capability_id: str) -> str:
@@ -80,7 +81,7 @@ async def _require_accessibility_tree(session: MobileSession, capability_id: str
     raise RuntimeError(f"Empty UI tree from device {serial}, session may not be ready")
 
 
-async def _collect_and_analyze(
+async def _run_scan_pipeline(
     request: MobileAccessibilityScanRequest,
     initial_tree_xml: str,
 ) -> MobileAccessibilityScanResult:
@@ -101,6 +102,14 @@ async def _collect_and_analyze(
         MobileStaticAnalyzer(request.platform),
         MAX_CONCURRENT_STATIC_ANALYSES,
     )
+    return _build_scan_result(report_id, navigator_data, static_analysis)
+
+
+def _build_scan_result(
+    report_id: str,
+    navigator_data: dict[str, object],
+    static_analysis: StaticAnalysisResult,
+) -> MobileAccessibilityScanResult:
     navigator_data["report_id"] = report_id
     _save_activity_reports(REPORTS_ROOT / report_id / "static_reports", static_analysis.activity_reports)
     static_results = static_analysis.report.model_dump(mode="json")
