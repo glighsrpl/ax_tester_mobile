@@ -6,9 +6,11 @@ from pathlib import Path
 
 from tools.mobile_saver_tool import generate_run_timestamp
 from tools.mobile_screen_scanner import MobileScreenNavigator
+from utils.helpers import sanitize_label
 from utils.mobile_pipeline import (
     ActivityReports,
     MobileStaticAnalyzer,
+    StaticAnalysisResult,
     run_mobile_pipeline,
 )
 from utils.mobile_report import save_source_reports
@@ -51,7 +53,6 @@ class MobileAccessibilityScanRequest:
 class MobileAccessibilityScanResult:
     """Artifacts produced by one touch-navigation accessibility scan."""
 
-    report_id: str
     navigator_data: dict[str, object]
     static_results: dict[str, object]
     static_debug_data: list[dict[str, object]]
@@ -68,28 +69,30 @@ async def run_mobile_accessibility_scan(
         request.app_package,
         request.app_activity,
     ) as session:
-        await _require_accessibility_tree(session, request.capability_id)
-        return await _collect_and_analyze(request)
+        initial_tree_xml = await _require_accessibility_tree(session, request.capability_id)
+        return await _run_scan_pipeline(request, initial_tree_xml)
 
 
-async def _require_accessibility_tree(session: MobileSession, capability_id: str) -> None:
+async def _require_accessibility_tree(session: MobileSession, capability_id: str) -> str:
     page_source = await session.get_accessibility_tree()
     if page_source and len(page_source) >= 100:
-        return
+        return page_source
     serial = capability_id.removeprefix("local-android:")
     raise RuntimeError(f"Empty UI tree from device {serial}, session may not be ready")
 
 
-async def _collect_and_analyze(
+async def _run_scan_pipeline(
     request: MobileAccessibilityScanRequest,
+    initial_tree_xml: str,
 ) -> MobileAccessibilityScanResult:
-    report_id = f"{generate_run_timestamp()}_{_report_label(request.app_package)}"
+    report_id = f"{generate_run_timestamp()}_{sanitize_label(request.app_package) or 'mobile'}"
     navigator = MobileScreenNavigator(
         {
             "max_steps": request.max_steps,
             "max_activities": request.max_activities,
             "max_depth": request.max_depth,
             "target_app_package": request.app_package,
+            "initial_tree_xml": initial_tree_xml,
             "run_id": report_id,
             "screenshot_output_dir": str(REPORTS_ROOT / report_id / "screenshots"),
         }
@@ -99,6 +102,14 @@ async def _collect_and_analyze(
         MobileStaticAnalyzer(request.platform),
         MAX_CONCURRENT_STATIC_ANALYSES,
     )
+    return _build_scan_result(report_id, navigator_data, static_analysis)
+
+
+def _build_scan_result(
+    report_id: str,
+    navigator_data: dict[str, object],
+    static_analysis: StaticAnalysisResult,
+) -> MobileAccessibilityScanResult:
     navigator_data["report_id"] = report_id
     _save_activity_reports(REPORTS_ROOT / report_id / "static_reports", static_analysis.activity_reports)
     static_results = static_analysis.report.model_dump(mode="json")
@@ -107,7 +118,6 @@ async def _collect_and_analyze(
         for activity, issues in static_analysis.issues_by_activity.items()
     }
     return MobileAccessibilityScanResult(
-        report_id=report_id,
         navigator_data=navigator_data,
         static_results=static_results,
         static_debug_data=static_analysis.debug_data,
@@ -126,7 +136,7 @@ def _save_activity_reports(
 ) -> None:
     multiple_activities = len(activity_reports) > 1
     for activity, reports in activity_reports.items():
-        directory = report_dir / _report_label(activity) if multiple_activities else report_dir
+        directory = report_dir / (sanitize_label(activity) or "mobile") if multiple_activities else report_dir
         save_source_reports(
             directory,
             reports.deterministic,
@@ -135,7 +145,3 @@ def _save_activity_reports(
             cross_screen=reports.cross_screen,
             merge=reports.merge,
         )
-
-
-def _report_label(value: str) -> str:
-    return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"

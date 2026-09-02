@@ -8,6 +8,7 @@ from tools.mobile_accessibility_service import (
     MobileAccessibilityScanRequest,
     run_mobile_accessibility_scan,
 )
+from tools.mobile_saver_tool import _state_str
 
 MOBILE_ROOT_AGENT_INSTRUCTION = """
 You are the root orchestrator for mobile accessibility testing.
@@ -31,10 +32,10 @@ async def run_mobile_test(
 ) -> dict[str, object]:
     """Run the mobile scan using the target and capability in ADK state."""
     request = MobileAccessibilityScanRequest(
-        app_package=_state_string(tool_context, MobileContextKey.APP_PACKAGE),
-        app_activity=_state_string(tool_context, MobileContextKey.APP_ACTIVITY),
-        capability_id=_state_string(tool_context, MobileContextKey.CAPABILITY_ID),
-        platform=_state_string(tool_context, MobileContextKey.PLATFORM),
+        app_package=_state_str(tool_context.state, MobileContextKey.APP_PACKAGE),
+        app_activity=_state_str(tool_context.state, MobileContextKey.APP_ACTIVITY),
+        capability_id=_state_str(tool_context.state, MobileContextKey.CAPABILITY_ID),
+        platform=_state_str(tool_context.state, MobileContextKey.PLATFORM),
         max_steps=max_steps,
         max_activities=max_activities,
         max_depth=max_depth,
@@ -51,11 +52,6 @@ async def run_mobile_test(
         "final_response": "Mobile navigation and static analysis completed.",
         "static_results": scan_result.static_results,
     }
-
-
-def _state_string(tool_context: ToolContext, key: MobileContextKey) -> str:
-    value = tool_context.state.get(key, tool_context.state.get(str(key), ""))
-    return str(value).strip() if value else ""
 
 
 def _store_navigation_limits(
