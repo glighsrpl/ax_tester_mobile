@@ -8,6 +8,7 @@ from typing import Any
 
 from common import MobileContextKey
 from schemas import ScoreInfo
+from utils.helpers import sanitize_label
 from utils.report_excel import build_excel_report
 from utils.report_pptx import build_pptx_report
 from utils.report_store import build_report_manifest, create_report_directory
@@ -261,11 +262,7 @@ def _report_id(navigator_data: Mapping[str, Any], app_package: str) -> str:
     configured_report_id = navigator_data.get("report_id")
     if isinstance(configured_report_id, str) and configured_report_id.strip():
         return configured_report_id.strip()
-    return f"{generate_run_timestamp()}_{_label(app_package)}"
-
-
-def _label(value: str) -> str:
-    return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"
+    return f"{generate_run_timestamp()}_{sanitize_label(app_package) or 'mobile'}"
 
 
 def _state_value(state: Mapping[Any, Any], key: object) -> Any:

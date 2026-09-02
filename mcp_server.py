@@ -30,7 +30,6 @@ from common import MobileContextKey
 from mobile_agent import mobile_root_agent
 from tools.mobile_saver_tool import run_save_mobile
 from utils.mobile_capabilities import discover_mobile_capabilities
-from utils.mobile_session import MOBILE_SESSION
 from utils.report_store import (
     REPORT_FILE_SPECS,
     build_report_manifest,
@@ -69,10 +68,7 @@ class MobileAgentBridge:
     async def run_turn(self, state: dict[str, Any]) -> dict[str, Any]:
         """Run one serialized ADK turn and return its resulting session state."""
         async with self.lock:
-            try:
-                return await self._run_turn_locked(state)
-            finally:
-                await MOBILE_SESSION.disconnect()
+            return await self._run_turn_locked(state)
 
     async def _run_turn_locked(self, state: dict[str, Any]) -> dict[str, Any]:
         self._ensure_runner()

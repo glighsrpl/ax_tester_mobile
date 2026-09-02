@@ -68,12 +68,12 @@ def bounds_size(bounds: str) -> tuple[int, int]:
     return right - left, bottom - top
 
 
-def _attr(node: ElementTree.Element, *names: str) -> str | None:
+def _attr(node: ElementTree.Element, *names: str, default: str | None = None) -> str | None:
     for name in names:
         value = (node.attrib.get(name) or "").strip()
         if value:
             return value
-    return None
+    return default
 
 
 def _raw_attr(node: ElementTree.Element, *names: str) -> str | None:

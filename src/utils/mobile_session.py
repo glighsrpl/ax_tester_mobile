@@ -12,6 +12,8 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import urlopen
 
+from utils.helpers import sanitize_label
+
 logger = logging.getLogger(__name__)
 
 APPIUM_SERVER_URL_ENV = "APPIUM_SERVER_URL"
@@ -42,9 +44,7 @@ def _project_root() -> Path:
 def _create_mobile_run_logs_dir(app_package: str | None = None) -> Path:
     logs_dir = _project_root() / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
-    package_label = "".join(
-        char if char.isalnum() or char in "._-" else "_" for char in app_package or "mobile"
-    ).strip("._-")
+    package_label = sanitize_label(app_package or "mobile") or "mobile"
     run_name = f"{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{package_label or 'mobile'}"
     run_logs_dir = logs_dir / run_name
     suffix = 1

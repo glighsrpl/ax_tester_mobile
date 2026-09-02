@@ -13,7 +13,8 @@ from uuid import uuid4
 from xml.etree import ElementTree
 
 from tools.base import MobileElementInfo, is_in_place_control
-from tools.mobile_tree import bounds_center, bounds_size, get_interactive_elements, parse_mobile_tree
+from tools.mobile_tree import _attr, bounds_center, bounds_size, get_interactive_elements, parse_mobile_tree
+from utils.helpers import sanitize_label
 from utils.mobile_session import MOBILE_SESSION, get_mobile_run_logs_dir
 
 logger = logging.getLogger(__name__)
@@ -74,16 +75,14 @@ class MobileScreenNavigator:
         self.target_app_package = config.get("target_app_package")
         self.screenshot_output_dir = config.get("screenshot_output_dir")
         self.run_id = config.get("run_id")
+        self._initial_tree_xml = config.get("initial_tree_xml")
         self._snapshots: list[MobileScanSnapshot] = []
         self._seen_activities: set[str] = set()
         self._seen_screens: set[str] = set()
         self._screen_activities: dict[str, str] = {}
         self._visited_activities: list[str] = []
-        self._activity_screenshots: dict[str, str] = {}
         self._path: list[str] = []
-        self._page_screenshot: str | None = None
         self._page_screenshot_id: str | None = None
-        self._page_screenshot_activity: str | None = None
         self._activity_screenshot_ids: dict[str, str] = {}
         self._snapshot_screenshots: dict[str, str] = {}
         self._step = 0
@@ -156,9 +155,7 @@ class MobileScreenNavigator:
 
         await self._ensure_scope(target_app_package)
         snapshot = await self._snapshot()
-        self._page_screenshot = self._page_screenshot or snapshot.screenshot
         self._page_screenshot_id = self._page_screenshot_id or snapshot.snapshot_id
-        self._page_screenshot_activity = self._page_screenshot_activity or self._activity_name(snapshot)
         root_hash = self._screen_hash(snapshot.tree_xml)
         self._screen_activities[root_hash] = self._activity_name(snapshot)
         screen_edges: dict[str, tuple[str, str, str] | None] = {root_hash: None}
@@ -594,8 +591,8 @@ class MobileScreenNavigator:
             return False
         self._seen_activities.add(activity)
         self._visited_activities.append(activity)
-        self._activity_screenshots[activity] = snapshot.screenshot
         self._activity_screenshot_ids[activity] = snapshot.snapshot_id
+        self._persist_snapshot_screenshot(snapshot)
         return True
 
     @staticmethod
@@ -622,9 +619,9 @@ class MobileScreenNavigator:
         for node in root.iter():
             if (node.attrib.get("scrollable") or "").strip().casefold() not in {"true", "1"}:
                 continue
-            class_name = MobileScreenNavigator._node_attr(node, "class", "className", "type").casefold()
-            resource_id = MobileScreenNavigator._node_attr(node, "resource-id", "resourceId")
-            bounds = MobileScreenNavigator._node_attr(node, "bounds")
+            class_name = (_attr(node, "class", "className", "type", default="") or "").casefold()
+            resource_id = _attr(node, "resource-id", "resourceId", default="") or ""
+            bounds = _attr(node, "bounds", default="") or ""
             known_class = any(name in class_name for name in _HORIZONTAL_CONTAINER_CLASSES)
             try:
                 width, height = bounds_size(bounds)
@@ -635,27 +632,11 @@ class MobileScreenNavigator:
                 containers.add((resource_id, bounds))
         return containers
 
-    @staticmethod
-    def _node_attr(node: ElementTree.Element, *names: str) -> str:
-        for name in names:
-            value = (node.attrib.get(name) or "").strip()
-            if value:
-                return value
-        return ""
-
     def result(self) -> dict[str, Any]:
-        page_screenshot = self._persist_screenshot(
-            self._page_screenshot,
-            activity_name=self._page_screenshot_activity or "unknown",
-            snapshot_id=self._page_screenshot_id,
-        )
+        page_screenshot = self._snapshot_screenshots.get(self._page_screenshot_id or "")
         activity_screenshots = {
-            activity: self._persist_screenshot(
-                screenshot,
-                activity_name=activity,
-                snapshot_id=self._activity_screenshot_ids.get(activity),
-            )
-            for activity, screenshot in self._activity_screenshots.items()
+            activity: self._snapshot_screenshots.get(snapshot_id)
+            for activity, snapshot_id in self._activity_screenshot_ids.items()
         }
         return MobileScreenNavigationResult(
             snapshots=tuple(self._snapshots),
@@ -687,27 +668,9 @@ class MobileScreenNavigator:
             return screenshot
         return str(screenshot_path)
 
-    def _screenshot_path(self, activity_name: str, snapshot_id: str | None) -> Path:
-        output_dir = self._screenshot_output_dir()
-        filename = f"{self._file_label(activity_name)}_{snapshot_id or 'unknown'}.png"
-        return (output_dir / filename).resolve()
-
-    def _screenshot_output_dir(self) -> Path:
-        configured_dir = self.screenshot_output_dir or os.getenv(SCREENSHOT_OUTPUT_DIR_ENV)
-        if configured_dir:
-            return Path(str(configured_dir)).expanduser()
-        run_id = self.run_id or os.getenv(MOBILE_RUN_ID_ENV) or get_mobile_run_logs_dir().name
-        return DEFAULT_SCREENSHOT_REPORTS_DIR / self._file_label(str(run_id)) / "screenshots"
-
-    @staticmethod
-    def _file_label(value: str) -> str:
-        return (
-            "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "unknown"
-        )
-
-    def _emit_snapshot(self, snapshot: MobileScanSnapshot) -> None:
-        if self._snapshot_queue is None:
-            raise RuntimeError("Mobile navigation snapshot stream is not active.")
+    def _persist_snapshot_screenshot(self, snapshot: MobileScanSnapshot) -> None:
+        if snapshot.snapshot_id in self._snapshot_screenshots:
+            return
         self._snapshot_screenshots[snapshot.snapshot_id] = (
             self._persist_screenshot(
                 snapshot.screenshot,
@@ -716,6 +679,23 @@ class MobileScreenNavigator:
             )
             or snapshot.screenshot
         )
+
+    def _screenshot_path(self, activity_name: str, snapshot_id: str | None) -> Path:
+        output_dir = self._screenshot_output_dir()
+        filename = f"{sanitize_label(activity_name) or 'unknown'}_{snapshot_id or 'unknown'}.png"
+        return (output_dir / filename).resolve()
+
+    def _screenshot_output_dir(self) -> Path:
+        configured_dir = self.screenshot_output_dir or os.getenv(SCREENSHOT_OUTPUT_DIR_ENV)
+        if configured_dir:
+            return Path(str(configured_dir)).expanduser()
+        run_id = self.run_id or os.getenv(MOBILE_RUN_ID_ENV) or get_mobile_run_logs_dir().name
+        return DEFAULT_SCREENSHOT_REPORTS_DIR / (sanitize_label(str(run_id)) or "unknown") / "screenshots"
+
+    def _emit_snapshot(self, snapshot: MobileScanSnapshot) -> None:
+        if self._snapshot_queue is None:
+            raise RuntimeError("Mobile navigation snapshot stream is not active.")
+        self._persist_snapshot_screenshot(snapshot)
         self._snapshots.append(snapshot)
         self._snapshot_queue.put_nowait(snapshot)
 
@@ -725,7 +705,8 @@ class MobileScreenNavigator:
 
     async def _snapshot(self) -> MobileScanSnapshot:
         self._snapshot_index += 1
-        tree = await MOBILE_SESSION.get_accessibility_tree()
+        tree = self._initial_tree_xml or await MOBILE_SESSION.get_accessibility_tree()
+        self._initial_tree_xml = None
         screenshot = await MOBILE_SESSION.take_screenshot()
         activity = await MOBILE_SESSION.get_current_activity()
         self._save_tree_snapshot(tree)

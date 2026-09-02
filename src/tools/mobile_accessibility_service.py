@@ -6,6 +6,7 @@ from pathlib import Path
 
 from tools.mobile_saver_tool import generate_run_timestamp
 from tools.mobile_screen_scanner import MobileScreenNavigator
+from utils.helpers import sanitize_label
 from utils.mobile_pipeline import (
     ActivityReports,
     MobileStaticAnalyzer,
@@ -68,28 +69,30 @@ async def run_mobile_accessibility_scan(
         request.app_package,
         request.app_activity,
     ) as session:
-        await _require_accessibility_tree(session, request.capability_id)
-        return await _collect_and_analyze(request)
+        initial_tree_xml = await _require_accessibility_tree(session, request.capability_id)
+        return await _collect_and_analyze(request, initial_tree_xml)
 
 
-async def _require_accessibility_tree(session: MobileSession, capability_id: str) -> None:
+async def _require_accessibility_tree(session: MobileSession, capability_id: str) -> str:
     page_source = await session.get_accessibility_tree()
     if page_source and len(page_source) >= 100:
-        return
+        return page_source
     serial = capability_id.removeprefix("local-android:")
     raise RuntimeError(f"Empty UI tree from device {serial}, session may not be ready")
 
 
 async def _collect_and_analyze(
     request: MobileAccessibilityScanRequest,
+    initial_tree_xml: str,
 ) -> MobileAccessibilityScanResult:
-    report_id = f"{generate_run_timestamp()}_{_report_label(request.app_package)}"
+    report_id = f"{generate_run_timestamp()}_{sanitize_label(request.app_package) or 'mobile'}"
     navigator = MobileScreenNavigator(
         {
             "max_steps": request.max_steps,
             "max_activities": request.max_activities,
             "max_depth": request.max_depth,
             "target_app_package": request.app_package,
+            "initial_tree_xml": initial_tree_xml,
             "run_id": report_id,
             "screenshot_output_dir": str(REPORTS_ROOT / report_id / "screenshots"),
         }
@@ -126,7 +129,7 @@ def _save_activity_reports(
 ) -> None:
     multiple_activities = len(activity_reports) > 1
     for activity, reports in activity_reports.items():
-        directory = report_dir / _report_label(activity) if multiple_activities else report_dir
+        directory = report_dir / (sanitize_label(activity) or "mobile") if multiple_activities else report_dir
         save_source_reports(
             directory,
             reports.deterministic,
@@ -135,7 +138,3 @@ def _save_activity_reports(
             cross_screen=reports.cross_screen,
             merge=reports.merge,
         )
-
-
-def _report_label(value: str) -> str:
-    return "".join(char if char.isalnum() or char in "._-" else "_" for char in value).strip("._-") or "mobile"
