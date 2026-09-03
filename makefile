@@ -10,3 +10,7 @@ checkformat:
 # mcp inspector
 mcpinspector:
 	bash -c 'trap "kill 0" SIGINT; python mcp_server.py & sleep 2 && npx @modelcontextprotocol/inspector@latest'
+
+# local run
+run_local:
+	uv run python run_local.py
