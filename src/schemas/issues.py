@@ -221,9 +221,7 @@ def xml_element_count(snapshot_data: object) -> int:
 def _sanitized_tree_element_count(tree: Mapping[str, object]) -> int:
     children = tree.get("children", [])
     child_nodes = children if isinstance(children, list) else []
-    return 1 + sum(
-        _sanitized_tree_element_count(child) for child in child_nodes if isinstance(child, Mapping)
-    )
+    return 1 + sum(_sanitized_tree_element_count(child) for child in child_nodes if isinstance(child, Mapping))
 
 
 def _score_field(level: str) -> str:

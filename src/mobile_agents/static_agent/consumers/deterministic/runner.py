@@ -30,10 +30,7 @@ class DeterministicRunner:
             for consumer in [*self.element_consumers, *self.snapshot_consumers]
             if (rule := _consumer_rule(consumer))
         }
-        return {
-            level: sum(f"(Level {level})" in rule for rule in rules)
-            for level in ("A", "AA", "AAA")
-        }
+        return {level: sum(f"(Level {level})" in rule for rule in rules) for level in ("A", "AA", "AAA")}
 
     def _consume_snapshot(self, snapshot: MobileScanSnapshot) -> list[Issue]:
         return [
