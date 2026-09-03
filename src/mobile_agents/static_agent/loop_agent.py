@@ -11,10 +11,12 @@ from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import MODEL, MobileContextKey
-from mobile_agents.static_agent.init_agent import _mobile_wcag_rules, init_agent
+from mobile_agents.static_agent.init_agent import _mobile_wcag_rules, init_agent, mobile_rules_by_level
 from schemas import Issue, Report
+from schemas.issues import fix_report_scores, xml_element_count
 
 MAX_ADDITIONAL_PASSES = 2
+LOOP_PASS_COUNT_KEY = "mobile_static_loop_pass_count"
 RESOURCE_ID_PATTERN = re.compile(r"resource[-_]id\s*[=:]\s*[\"']?([^\"'\s,}]+)", re.IGNORECASE)
 XPATH_PATTERN = re.compile(r"xpath\s*[=:]\s*[\"']?([^\"'\s,}]+)", re.IGNORECASE)
 
@@ -60,12 +62,23 @@ def get_mobile_loop_instruction(tool_context: ToolContext) -> str:
 
 
 def merge_loop_pass(callback_context: CallbackContext) -> None:
+    completed_passes = int(callback_context.state.get(LOOP_PASS_COUNT_KEY, 0)) + 1
     pass_report = _report_from_value(_state_value(callback_context.state, MobileContextKey.LOOP_REPORT, {}))
+    pass_report = fix_report_scores(
+        pass_report,
+        _xml_elements(callback_context.state),
+        _multiplied_rules(completed_passes),
+    )
     static_report = _report_from_value(_state_value(callback_context.state, MobileContextKey.STATIC_RESULTS, {}))
     new_issues = _new_issues(static_report.issue_list, pass_report.issue_list)
-    enriched_report = _with_issues(static_report, new_issues)
+    enriched_report = fix_report_scores(
+        _with_issues(static_report, new_issues),
+        _xml_elements(callback_context.state),
+        _multiplied_rules(completed_passes + 1),
+    ).model_dump(mode="json")
     callback_context.state[MobileContextKey.LOOP_REPORT] = enriched_report
     callback_context.state[MobileContextKey.STATIC_RESULTS] = enriched_report
+    callback_context.state[LOOP_PASS_COUNT_KEY] = completed_passes
     if not new_issues:
         callback_context._event_actions.escalate = True
 
@@ -85,9 +98,17 @@ def _report_from_value(value: object) -> Report:
     return Report.model_validate(value)
 
 
-def _with_issues(report: Report, new_issues: list[Issue]) -> dict[str, Any]:
+def _with_issues(report: Report, new_issues: list[Issue]) -> Report:
     issues = [*report.issue_list, *new_issues]
-    return report.model_copy(update={"issue_list": issues, "total_issues": len(issues)}).model_dump(mode="json")
+    return report.model_copy(update={"issue_list": issues})
+
+
+def _xml_elements(state: Mapping[Any, Any]) -> int:
+    return xml_element_count(_state_value(state, MobileContextKey.NAVIGATOR_DATA, {}))
+
+
+def _multiplied_rules(multiplier: int) -> dict[str, int]:
+    return {level: count * multiplier for level, count in mobile_rules_by_level().items()}
 
 
 def _new_issues(existing_issues: list[Issue], candidates: list[Issue]) -> list[Issue]:

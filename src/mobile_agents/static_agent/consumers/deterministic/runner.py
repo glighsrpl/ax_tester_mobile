@@ -23,6 +23,18 @@ class DeterministicRunner:
             issues.extend(self._consume_element(element))
         return issues
 
+    def rules_by_level(self) -> dict[str, int]:
+        """Return the number of distinct WCAG rules evaluated by each consumer."""
+        rules = {
+            rule
+            for consumer in [*self.element_consumers, *self.snapshot_consumers]
+            if (rule := _consumer_rule(consumer))
+        }
+        return {
+            level: sum(f"(Level {level})" in rule for rule in rules)
+            for level in ("A", "AA", "AAA")
+        }
+
     def _consume_snapshot(self, snapshot: MobileScanSnapshot) -> list[Issue]:
         return [
             issue.model_copy(update={"source": "deterministic_analyzer"})
@@ -71,3 +83,9 @@ class DeterministicRunner:
                 for consumer_class in sorted(snapshot_consumer_classes, key=lambda item: item.__name__)
             ],
         )
+
+
+def _consumer_rule(consumer: BaseConsumer | BaseSnapshotConsumer) -> str:
+    module = inspect.getmodule(type(consumer))
+    rule = getattr(module, "WCAG_RULE", "") if module is not None else ""
+    return rule if isinstance(rule, str) else ""

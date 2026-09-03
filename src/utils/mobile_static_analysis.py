@@ -14,7 +14,7 @@ from mobile_agents.static_agent import (
     mobile_static_analysis_agent,
     mobile_static_post_pass_agent,
 )
-from schemas import Report
+from schemas import Report, ScoreInfo
 from tools.mobile_screen_scanner import MobileScanSnapshot
 from utils.contrast_calculator import calculate_contrast_measurements
 from utils.mobile_queue import SnapshotAnalysis
@@ -257,7 +257,22 @@ def _aggregate_source_report(reports: list[Report], total_snapshots: int, tool_n
 def append_cross_screen_issues(merge_report: Report, cross_screen_report: Report) -> Report:
     """Create the final report by appending cross-screen findings without deduplication."""
     issues = [*merge_report.issue_list, *cross_screen_report.issue_list]
-    return merge_report.model_copy(update={"issue_list": issues, "total_issues": len(issues)})
+    return merge_report.model_copy(
+        update={
+            "issue_list": issues,
+            "total_issues": len(issues),
+            "score_total": _sum_score_info(merge_report.score_total, cross_screen_report.score_total),
+            "score_passed": _sum_score_info(merge_report.score_passed, cross_screen_report.score_passed),
+        }
+    )
+
+
+def _sum_score_info(first: ScoreInfo, second: ScoreInfo) -> ScoreInfo:
+    return ScoreInfo(
+        level_A=first.level_A + second.level_A,
+        level_AA=first.level_AA + second.level_AA,
+        level_AAA=first.level_AAA + second.level_AAA,
+    )
 
 
 def mobile_page(app_package: str, activity: str) -> str:

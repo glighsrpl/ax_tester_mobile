@@ -7,7 +7,8 @@ from google.adk.agents.callback_context import CallbackContext
 
 from common import MobileContextKey
 from mobile_agents.static_agent.consumers.deterministic.runner import DeterministicRunner
-from schemas import Issue
+from schemas import Issue, Report
+from schemas.issues import fix_report_scores, xml_element_count
 from tools.base import MobileElementInfo
 from tools.mobile_screen_scanner import MobileScanSnapshot
 
@@ -15,6 +16,19 @@ from tools.mobile_screen_scanner import MobileScanSnapshot
 def run_deterministic_analysis(snapshot: MobileScanSnapshot) -> list[Issue]:
     """Run deterministic checks for one mobile screen snapshot."""
     return DeterministicRunner().run(snapshot)
+
+
+def run_deterministic_report(snapshot: MobileScanSnapshot) -> Report:
+    """Run deterministic checks and return their deterministically scored report."""
+    runner = DeterministicRunner()
+    report = Report(
+        tool_name="deterministic",
+        total_issues=0,
+        page=f"mobile://{snapshot.activity}",
+        issue_list=runner.run(snapshot),
+        metadata=[{"key": "snapshot_id", "value": snapshot.snapshot_id}],
+    )
+    return fix_report_scores(report, xml_element_count(snapshot.tree_xml), runner.rules_by_level())
 
 
 def run_deterministic_checks(callback_context: CallbackContext) -> None:

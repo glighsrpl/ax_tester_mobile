@@ -1,12 +1,15 @@
 import json
+from functools import lru_cache
 from pathlib import Path
 
 import yaml
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import MODEL, MobileContextKey
 from schemas import Report
+from schemas.issues import fix_report_scores, xml_element_count
 
 PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "wcag_mobile.yml"
 
@@ -47,16 +50,6 @@ def get_mobile_static_instruction(tool_context: ToolContext) -> str:
     """
 
 
-init_agent = LlmAgent(
-    name="MobileStaticInitAgent",
-    model=MODEL,
-    description="Analyze mobile snapshots against WCAG mobile rules.",
-    instruction=get_mobile_static_instruction,
-    output_schema=Report,
-    output_key=MobileContextKey.STATIC_RESULTS,
-)
-
-
 def _mobile_wcag_rules(platform: str = "") -> list[dict[str, object]]:
     prompt = _mobile_prompt()
     criteria_by_level = prompt.get("levels", {})
@@ -72,10 +65,53 @@ def _mobile_wcag_rules(platform: str = "") -> list[dict[str, object]]:
     ]
 
 
+@lru_cache(maxsize=1)
 def _mobile_prompt() -> dict[str, object]:
     with PROMPT_PATH.open(encoding="utf-8") as file:
         prompt = yaml.safe_load(file) or {}
     return prompt if isinstance(prompt, dict) else {}
+
+
+def mobile_rules_by_level() -> dict[str, int]:
+    """Count the WCAG criteria loaded from the mobile prompt once per process."""
+    criteria_by_level = _mobile_prompt().get("levels", {})
+    if not isinstance(criteria_by_level, dict):
+        return {"A": 0, "AA": 0, "AAA": 0}
+    return {
+        level: len(rules.get("success_criteria", [])) if isinstance(rules, dict) else 0
+        for level in ("A", "AA", "AAA")
+        for rules in (criteria_by_level.get(level, {}),)
+    }
+
+
+def fix_init_report_scores(callback_context: CallbackContext) -> None:
+    """Replace LLM-provided initial-analysis scores with deterministic values."""
+    state = callback_context.state
+    report_value = state.get(MobileContextKey.STATIC_RESULTS) or state.get(
+        str(MobileContextKey.STATIC_RESULTS), {}
+    )
+    report = (
+        Report.model_validate_json(report_value)
+        if isinstance(report_value, str)
+        else Report.model_validate(report_value)
+    )
+    snapshot_data = state.get(MobileContextKey.NAVIGATOR_DATA) or state.get(
+        str(MobileContextKey.NAVIGATOR_DATA), {}
+    )
+    state[MobileContextKey.STATIC_RESULTS] = fix_report_scores(
+        report, xml_element_count(snapshot_data), mobile_rules_by_level()
+    ).model_dump(mode="json")
+
+
+init_agent = LlmAgent(
+    name="MobileStaticInitAgent",
+    model=MODEL,
+    description="Analyze mobile snapshots against WCAG mobile rules.",
+    instruction=get_mobile_static_instruction,
+    output_schema=Report,
+    output_key=MobileContextKey.STATIC_RESULTS,
+    after_agent_callback=fix_init_report_scores,
+)
 
 
 def _compact_criterion(criterion: object, platform: str) -> dict[str, object]:

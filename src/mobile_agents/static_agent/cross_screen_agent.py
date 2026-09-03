@@ -4,11 +4,13 @@ import json
 from collections.abc import Mapping
 from typing import Any
 
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import MODEL, MobileContextKey
 from schemas import Report
+from schemas.issues import fix_report_scores
 
 CROSS_SCREEN_RULES = (
     "1.3.1 - Info and Relationships (Level A)",
@@ -18,6 +20,7 @@ CROSS_SCREEN_RULES = (
     "3.2.3 - Consistent Navigation (Level AA)",
     "3.2.4 - Consistent Identification (Level AA)",
 )
+CROSS_SCREEN_RULES_BY_LEVEL = {"A": 3, "AA": 3, "AAA": 0}
 
 
 def get_cross_screen_instruction(tool_context: ToolContext) -> str:
@@ -110,6 +113,22 @@ def _state_text(tool_context: ToolContext, key: MobileContextKey) -> str:
     return str(tool_context.state.get(key) or tool_context.state.get(str(key)) or "unknown").strip()
 
 
+def fix_cross_screen_report_scores(callback_context: CallbackContext) -> None:
+    """Replace LLM-provided cross-screen scores with deterministic values."""
+    state = callback_context.state
+    report_value = state.get(MobileContextKey.CROSS_SCREEN_REPORT) or state.get(
+        str(MobileContextKey.CROSS_SCREEN_REPORT), {}
+    )
+    report = (
+        Report.model_validate_json(report_value)
+        if isinstance(report_value, str)
+        else Report.model_validate(report_value)
+    )
+    state[MobileContextKey.CROSS_SCREEN_REPORT] = fix_report_scores(
+        report, 1, CROSS_SCREEN_RULES_BY_LEVEL
+    ).model_dump(mode="json")
+
+
 cross_screen_agent = LlmAgent(
     name="MobileCrossScreenAgent",
     model=MODEL,
@@ -117,4 +136,5 @@ cross_screen_agent = LlmAgent(
     instruction=get_cross_screen_instruction,
     output_schema=Report,
     output_key=MobileContextKey.CROSS_SCREEN_REPORT,
+    after_agent_callback=fix_cross_screen_report_scores,
 )
