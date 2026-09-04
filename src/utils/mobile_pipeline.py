@@ -113,7 +113,7 @@ async def run_mobile_pipeline(
         key=lambda analysis: analysis.snapshot_index,
     )
     navigator_data = navigator.result()
-    return navigator_data, await aggregate_static_analyses(analyses, navigator_data) # TODO: return also semantic results
+    return navigator_data, await aggregate_static_analyses(analyses, navigator_data)
 
 
 async def indexed_snapshots(
