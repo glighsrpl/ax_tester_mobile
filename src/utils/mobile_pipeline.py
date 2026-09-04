@@ -6,6 +6,12 @@ from collections.abc import AsyncGenerator, Mapping
 from dataclasses import dataclass
 from typing import Protocol
 
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+from google.genai import types
+
+from common import MobileContextKey
+from mobile_agents.semantic_agent.image_analyzer_agent import image_analyzer_agent
 from schemas import Issue, Report
 from tools.mobile_screen_scanner import MobileScanSnapshot
 from utils.mobile_queue import SnapshotAnalysis, StaticAnalyzer, consume_static_snapshots
@@ -121,26 +127,89 @@ async def run_mobile_pipeline(
 
 
 async def run_semantic_analysis(navigator_data: Mapping[str, object]) -> AnalysisResult[Report]:
-    """Run the temporary semantic stub with each snapshot's screenshot and XML tree."""
+    """Analyze every snapshot's images and aggregate reports by activity."""
     snapshots = navigator_data.get("snapshots")
     snapshot_items = snapshots if isinstance(snapshots, list) else []
-    semantic_inputs: list[tuple[object, object]] = []
+    reports_by_activity: dict[str, list[Report]] = {}
     activity_snapshot_counts: dict[str, int] = {}
-    for snapshot in snapshot_items:
+    failed_activities: set[str] = set()
+    for snapshot_index, snapshot in enumerate(snapshot_items):
         if not isinstance(snapshot, Mapping):
             continue
-        semantic_inputs.append((snapshot.get("screenshot"), snapshot.get("tree_xml")))
         activity = str(snapshot.get("activity") or "unknown").strip() or "unknown"
         activity_snapshot_counts[activity] = activity_snapshot_counts.get(activity, 0) + 1
+        if activity in failed_activities:
+            continue
+        try:
+            report = await _analyze_semantic_snapshot(
+                snapshot.get("screenshot"),
+                snapshot.get("tree_xml"),
+                snapshot_index,
+            )
+        except Exception:
+            logger.exception("Semantic analysis failed for activity %s", activity)
+            failed_activities.add(activity)
+            reports_by_activity.pop(activity, None)
+        else:
+            reports_by_activity.setdefault(activity, []).append(report)
     activity_reports = {
-        activity: _empty_semantic_report(snapshot_count)
+        activity: (
+            _empty_semantic_report(snapshot_count)
+            if activity in failed_activities
+            else _merge_semantic_reports(reports_by_activity.get(activity, []), snapshot_count)
+        )
         for activity, snapshot_count in activity_snapshot_counts.items()
     }
+    issues_by_activity = {activity: report.issue_list for activity, report in activity_reports.items()}
     return AnalysisResult(
-        report=_empty_semantic_report(len(semantic_inputs)),
+        report=_merge_semantic_reports(
+            list(activity_reports.values()),
+            sum(activity_snapshot_counts.values()),
+        ),
         activity_reports=activity_reports,
-        issues_by_activity={activity: [] for activity in activity_reports},
+        issues_by_activity=issues_by_activity,
         debug_data=None,
+    )
+
+
+async def _analyze_semantic_snapshot(
+    screenshot: object,
+    tree_xml: object,
+    snapshot_index: int,
+) -> Report:
+    session_service = InMemorySessionService()
+    runner = Runner(
+        agent=image_analyzer_agent,
+        app_name="semantic_image_analyzer",
+        session_service=session_service,
+    )
+    session = await session_service.create_session(
+        app_name=runner.app_name,
+        user_id="mobile_pipeline",
+        session_id=f"semantic-snapshot-{snapshot_index}",
+        state={"screenshot": screenshot, "tree_xml": tree_xml, "page": "mobile"},
+    )
+    message = types.Content(
+        role="user",
+        parts=[types.Part(text="Analyze the screenshot and XML tree in the session context.")],
+    )
+    async for event in runner.run_async(
+        user_id=session.user_id,
+        session_id=session.id,
+        new_message=message,
+    ):
+        if event.actions is None:
+            continue
+        result = event.actions.state_delta.get(MobileContextKey.SEMANTIC_RESULTS)
+        if result is not None:
+            return Report.model_validate(result)
+    raise RuntimeError("Semantic image analyzer did not return a report")
+
+
+def _merge_semantic_reports(reports: list[Report], snapshot_count: int) -> Report:
+    issues = [issue for report in reports for issue in report.issue_list]
+    return _empty_semantic_report(snapshot_count).model_copy(
+        update={"total_issues": len(issues), "issue_list": issues}
     )
 
 
