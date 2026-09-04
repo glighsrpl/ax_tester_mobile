@@ -113,8 +113,10 @@ async def run_mobile_pipeline(
         key=lambda analysis: analysis.snapshot_index,
     )
     navigator_data = navigator.result()
-    static_analysis = await aggregate_static_analyses(analyses, navigator_data)
-    semantic_analysis = await run_semantic_analysis(navigator_data)
+    static_analysis, semantic_analysis = await asyncio.gather(
+        aggregate_static_analyses(analyses, navigator_data),
+        run_semantic_analysis(navigator_data),
+    )
     return navigator_data, static_analysis, semantic_analysis
 
 
