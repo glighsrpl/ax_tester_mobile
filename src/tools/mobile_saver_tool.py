@@ -151,7 +151,6 @@ def _build_screen_reports(
     issues_by_activity: dict[str, list[dict[str, Any]]] = {activity: [] for activity in activities}
     score_passed = ScoreInfo()
     score_total = ScoreInfo()
-    checked = 0
 
     for consumer in static_results:
         result = consumer.get("result", {}) if isinstance(consumer, Mapping) else {}
@@ -170,7 +169,6 @@ def _build_screen_reports(
                     activities.append(activity)
                     issues_by_activity[activity] = []
                 issues_by_activity[activity].append(_with_activity(issue, activity))
-        checked += _safe_int(result.get("checked", 0)) if isinstance(result, Mapping) else 0
         _merge_score(score_passed, result.get("score_passed", {}) if isinstance(result, Mapping) else {})
         _merge_score(score_total, result.get("score_total", {}) if isinstance(result, Mapping) else {})
 
@@ -183,7 +181,6 @@ def _build_screen_reports(
             report_id=report_id,
             activity=activity,
             issues=issues_by_activity.get(activity, []),
-            checked=checked,
             score_passed=score_passed,
             score_total=score_total,
         )
@@ -217,7 +214,6 @@ def _build_screen_report(
     report_id: str,
     activity: str,
     issues: list[dict[str, Any]],
-    checked: int,
     score_passed: ScoreInfo,
     score_total: ScoreInfo,
 ) -> dict[str, Any]:
@@ -243,7 +239,6 @@ def _build_screen_report(
             {"key": "app_activity", "value": app_activity},
             {"key": "capability_id", "value": capability_id},
             {"key": "steps", "value": _safe_int(navigator_data.get("steps", 0))},
-            {"key": "checked", "value": checked},
         ],
     }
 

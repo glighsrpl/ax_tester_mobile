@@ -17,7 +17,7 @@ from utils.mobile_report import save_source_reports
 from utils.mobile_session import MobileSession, mobile_session
 from utils.report_store import REPORTS_ROOT
 
-MAX_CONCURRENT_STATIC_ANALYSES = 4
+MAX_CONCURRENT_STATIC_ANALYSES = 2
 
 
 @dataclass(frozen=True)
