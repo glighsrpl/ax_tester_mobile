@@ -299,9 +299,9 @@ async def run_full_mobile_test(
     app_package: str,
     app_activity: str,
     capability_id: str | None = None,
-    max_steps: int = 500,
-    max_activities: int = 20,
-    max_depth: int = 10,
+    max_steps: int = 100,
+    max_activities: int = 10,
+    max_depth: int = 0,
 ) -> mcp_types.CallToolResult:
     """Run the mobile accessibility flow using explicit app package/activity arguments.
 
