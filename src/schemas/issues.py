@@ -5,7 +5,14 @@ from xml.etree import ElementTree
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SeverityKey = Literal["critical", "serious", "moderate", "minor"]
-SourceType = Literal["llm", "both", "deterministic_analyzer", "llm/contrast_agent", "llm/cross_screen_agent"]
+SourceType = Literal[
+    "llm",
+    "both",
+    "deterministic_analyzer",
+    "llm/semantic_analyzer",
+    "llm/contrast_agent",
+    "llm/cross_screen_agent",
+]
 ConfidenceLevel = Literal["high", "medium", "low"]
 WcagRule = Literal[
     "1.1.1 - Non-text Content (Level A)",
