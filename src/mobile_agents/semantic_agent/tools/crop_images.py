@@ -10,9 +10,7 @@ from typing import Any
 from PIL import Image
 
 
-def crop_images(
-    screenshot: bytes, images_inventory: list[dict[str, Any]]
-) -> list[dict[str, Any]]:
+def crop_images(screenshot: bytes, images_inventory: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return PNG-encoded crops for the valid image regions in an inventory."""
     with Image.open(BytesIO(screenshot)) as screenshot_image:
         screenshot_width, screenshot_height = screenshot_image.size

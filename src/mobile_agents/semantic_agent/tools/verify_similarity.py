@@ -6,7 +6,6 @@ from typing import Any
 
 from sentence_transformers import SentenceTransformer
 
-
 DEFAULT_SIMILARITY_THRESHOLD = 0.75
 EMBEDDING_MODEL_NAME = "paraphrase-multilingual-MiniLM-L12-v2"
 _EMBEDDING_MODEL = SentenceTransformer(EMBEDDING_MODEL_NAME)

@@ -6,18 +6,13 @@ import re
 from typing import Any
 from xml.etree import ElementTree
 
-
 MINIMUM_IMAGE_DIMENSION = 10
 _ANDROID_IMAGE_CLASSES = {
     "android.widget.ImageButton",
     "android.widget.ImageView",
 }
-_FLUTTER_IMAGE_IDENTIFIER_PATTERN = re.compile(
-    r"image|icon|img|picture", re.IGNORECASE
-)
-_ANDROID_BOUNDS_PATTERN = re.compile(
-    r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]"
-)
+_FLUTTER_IMAGE_IDENTIFIER_PATTERN = re.compile(r"image|icon|img|picture", re.IGNORECASE)
+_ANDROID_BOUNDS_PATTERN = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 
 
 def extract_images(tree_xml: str, platform: str = "android") -> list[dict[str, Any]]:
@@ -53,12 +48,9 @@ def _is_image_node_android(node: ElementTree.Element) -> bool:
     """Identify Android native and Flutter image representations."""
     class_name = node.get("class", "")
     resource_id = node.get("resource-id", "")
-    is_native_image = (
-        class_name in _ANDROID_IMAGE_CLASSES or "Image" in class_name
-    )
+    is_native_image = class_name in _ANDROID_IMAGE_CLASSES or "Image" in class_name
     is_flutter_image = (
-        class_name == "android.view.View"
-        and _FLUTTER_IMAGE_IDENTIFIER_PATTERN.search(resource_id) is not None
+        class_name == "android.view.View" and _FLUTTER_IMAGE_IDENTIFIER_PATTERN.search(resource_id) is not None
     )
     return is_native_image or is_flutter_image
 
