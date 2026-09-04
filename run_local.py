@@ -1,13 +1,15 @@
 import asyncio
 from typing import Any
+
 from dotenv import load_dotenv
+
+from common import MobileContextKey
+from mcp_server import MobileAgentBridge, _detect_mobile_platform, _report_embedded_content, read_report_json
+from tools.mobile_saver_tool import run_save_mobile
+from utils.mobile_capabilities import discover_mobile_capabilities
 
 load_dotenv()
 
-from common import MobileContextKey
-from tools.mobile_saver_tool import run_save_mobile
-from utils.mobile_capabilities import discover_mobile_capabilities
-from mcp_server import MobileAgentBridge, _detect_mobile_platform, _report_embedded_content, read_report_json
 
 def _error_result(message: str, details: dict) -> dict:
     return {
@@ -15,6 +17,7 @@ def _error_result(message: str, details: dict) -> dict:
         "message": message,
         "details": details,
     }
+
 
 def _build_mobile_scan_result(bridge_result: dict[str, Any]):
     report_artifact = bridge_result.get("report_artifact")
@@ -37,6 +40,7 @@ def _build_mobile_scan_result(bridge_result: dict[str, Any]):
             f"Accessibility test completed. Report id: {report_id}. JSON report attached.",
         )
         report = read_report_json(report_id)
+        print(f"Report {report_id} loaded successfully. Report summary: {report.get('summary', {})}")
     except (FileNotFoundError, ValueError, OSError) as exc:
         return _error_result(
             f"The test saved report_id {report_id}, but the JSON report could not be loaded: {exc}",
@@ -105,13 +109,16 @@ async def run_full_mobile_test(
     except Exception as exc:
         return _error_result(str(exc), {"capability_id": capability_id})
 
+
 if __name__ == "__main__":
     mobile_bridge = MobileAgentBridge()
-    asyncio.run(run_full_mobile_test(
-        app_package="it.widiba.bol",
-        app_activity=".MainActivity",
-        capability_id=None,
-        max_steps=5,
-        max_activities=20,
-        max_depth=10,
-    ))
+    asyncio.run(
+        run_full_mobile_test(
+            app_package="it.widiba.bol",
+            app_activity=".MainActivity",
+            capability_id=None,
+            max_steps=5,
+            max_activities=20,
+            max_depth=10,
+        )
+    )

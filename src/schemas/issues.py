@@ -1,4 +1,6 @@
+from collections.abc import Mapping
 from typing import Any, Literal
+from xml.etree import ElementTree
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -171,3 +173,78 @@ class Report(BaseModel):
     score_passed: ScoreInfo = Field(default_factory=ScoreInfo)
     score_total: ScoreInfo = Field(default_factory=ScoreInfo)
     metadata: list[MetadataItem] = Field(default_factory=list)
+
+
+WCAG_LEVEL_WEIGHTS = {"A": 3, "AA": 2, "AAA": 1}
+
+
+def fix_report_scores(report: Report, num_xml_elements: int, rules_by_level: dict[str, int]) -> Report:
+    """Return a report whose issue count and WCAG scores are code-derived."""
+    score_total = ScoreInfo(
+        **{
+            _score_field(level): num_xml_elements * rules_by_level.get(level, 0) * weight
+            for level, weight in WCAG_LEVEL_WEIGHTS.items()
+        }
+    )
+    issue_counts = _issue_counts_by_level(report.issue_list)
+    score_passed = ScoreInfo(
+        **{
+            _score_field(level): getattr(score_total, _score_field(level)) - issue_counts[level] * weight
+            for level, weight in WCAG_LEVEL_WEIGHTS.items()
+        }
+    )
+    return report.model_copy(
+        update={
+            "total_issues": len(report.issue_list),
+            "score_total": score_total,
+            "score_passed": score_passed,
+        }
+    )
+
+
+def xml_element_count(snapshot_data: object) -> int:
+    """Count nodes in the XML tree representation contained in a mobile snapshot."""
+    if isinstance(snapshot_data, Mapping):
+        sanitized_tree = snapshot_data.get("sanitized_tree")
+        if isinstance(sanitized_tree, Mapping):
+            return _sanitized_tree_element_count(sanitized_tree)
+    xml_tree = _find_xml_tree(snapshot_data)
+    if not xml_tree:
+        return 0
+    try:
+        root = ElementTree.fromstring(xml_tree)
+    except ElementTree.ParseError:
+        return 0
+    return sum(1 for _ in root.iter())
+
+
+def _sanitized_tree_element_count(tree: Mapping[str, object]) -> int:
+    children = tree.get("children", [])
+    child_nodes = children if isinstance(children, list) else []
+    return 1 + sum(_sanitized_tree_element_count(child) for child in child_nodes if isinstance(child, Mapping))
+
+
+def _score_field(level: str) -> str:
+    return f"level_{level}"
+
+
+def _issue_counts_by_level(issues: list[Issue]) -> dict[str, int]:
+    return {
+        level: sum(f"(Level {level})" in issue.wcag_rule for issue in issues) for level in WCAG_LEVEL_WEIGHTS
+    }
+
+
+def _find_xml_tree(value: object) -> str | None:
+    if isinstance(value, Mapping):
+        for key, nested_value in value.items():
+            if "xml" in str(key).lower() and isinstance(nested_value, str):
+                return nested_value
+            xml_tree = _find_xml_tree(nested_value)
+            if xml_tree:
+                return xml_tree
+    elif isinstance(value, list):
+        for nested_value in value:
+            xml_tree = _find_xml_tree(nested_value)
+            if xml_tree:
+                return xml_tree
+    return value if isinstance(value, str) and value.lstrip().startswith("<") else None

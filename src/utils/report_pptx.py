@@ -876,17 +876,24 @@ def _decode_base64_image(value: str) -> bytes | None:
         return None
 
 
-def _get_issue_image_source(issue: dict[str, Any]) -> str | None:
+def _get_issue_image_sources(issue: dict[str, Any]) -> list[str]:
     raw_value = issue.get("img_url_or_path")
     if raw_value is None:
         raw_value = issue.get("image_url_or_path")
     if raw_value is None:
-        return None
+        return []
+    parts = str(raw_value).split("|")  # supports '|'-separated multi-paths
+    result = []
+    for p in parts:
+        normalized = p.strip()
+        if normalized and normalized.lower() not in {"none", "null"}:
+            result.append(normalized)
+    return result
 
-    normalized = str(raw_value).strip()
-    if not normalized or normalized.lower() in {"none", "null"}:
-        return None
-    return normalized
+
+def _get_issue_image_source(issue: dict[str, Any]) -> str | None:
+    sources = _get_issue_image_sources(issue)
+    return sources[0] if sources else None  # returns the first screenshot path or None
 
 
 def _get_issue_image_bytes(image_source: str | None, image_cache: dict[str, bytes | None]) -> bytes | None:

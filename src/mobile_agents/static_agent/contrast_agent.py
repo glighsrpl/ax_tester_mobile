@@ -2,11 +2,15 @@
 
 import json
 
+from google.adk.agents.callback_context import CallbackContext
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.tools.tool_context import ToolContext
 
 from common import MODEL, MobileContextKey
 from schemas import Report
+from schemas.issues import fix_report_scores, xml_element_count
+
+CONTRAST_RULES_BY_LEVEL = {"A": 0, "AA": 2, "AAA": 0}
 
 
 def get_contrast_instruction(tool_context: ToolContext) -> str:
@@ -27,7 +31,7 @@ def get_contrast_instruction(tool_context: ToolContext) -> str:
         false. Omit ambiguous, photographic, gradient, translucent, obscured, or
         otherwise unmeasurable evidence.
 
-        ## WCAG 1.4.3 — Contrast (Minimum)
+        ## WCAG 1.4.3 — Contrast (Minimum) (Level AA)
         Report only a contrast_measurement with candidate_type "text" and allowed_rule
         "1.4.3", or candidate_type "image" and allowed_rule "1.4.3_or_1.4.11" after
         the screenshot clearly shows that it is an image of text. For text use
@@ -39,7 +43,7 @@ def get_contrast_instruction(tool_context: ToolContext) -> str:
         if the exception cannot be determined confidently, omit the issue. Never use
         1.4.3 for component borders, icons, or state indicators.
 
-        ## WCAG 1.4.11 — Non-text Contrast
+        ## WCAG 1.4.11 — Non-text Contrast (Level AA)
         Report only a contrast_measurement with candidate_type "ui_component" and
         allowed_rule "1.4.11", or candidate_type "image" and allowed_rule
         "1.4.3_or_1.4.11" after the screenshot clearly shows it is a required graphical
@@ -69,6 +73,25 @@ def get_contrast_instruction(tool_context: ToolContext) -> str:
     """
 
 
+def fix_contrast_report_scores(callback_context: CallbackContext) -> None:
+    """Replace LLM-provided contrast scores with deterministic values."""
+    state = callback_context.state
+    report_value = state.get(MobileContextKey.CONTRAST_REPORT) or state.get(
+        str(MobileContextKey.CONTRAST_REPORT), {}
+    )
+    report = (
+        Report.model_validate_json(report_value)
+        if isinstance(report_value, str)
+        else Report.model_validate(report_value)
+    )
+    snapshot_data = state.get(MobileContextKey.NAVIGATOR_DATA) or state.get(
+        str(MobileContextKey.NAVIGATOR_DATA), {}
+    )
+    state[MobileContextKey.CONTRAST_REPORT] = fix_report_scores(
+        report, xml_element_count(snapshot_data), CONTRAST_RULES_BY_LEVEL
+    ).model_dump(mode="json")
+
+
 contrast_agent = LlmAgent(
     name="MobileStaticContrastAgent",
     model=MODEL,
@@ -76,4 +99,5 @@ contrast_agent = LlmAgent(
     instruction=get_contrast_instruction,
     output_schema=Report,
     output_key=MobileContextKey.CONTRAST_REPORT,
+    after_agent_callback=fix_contrast_report_scores,
 )

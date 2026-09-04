@@ -2,20 +2,13 @@ import json
 from collections.abc import Iterable
 from pathlib import Path
 
-from mobile_agents.static_agent.deterministic_consumers import run_deterministic_analysis
+from mobile_agents.static_agent.deterministic_consumers import run_deterministic_report
 from schemas import Issue, Report, ScoreInfo
 from tools.mobile_screen_scanner import MobileScanSnapshot
 
 
 def deterministic_report(snapshot: MobileScanSnapshot) -> Report:
-    issues = run_deterministic_analysis(snapshot)
-    return Report(
-        tool_name="deterministic",
-        total_issues=len(issues),
-        page=f"mobile://{snapshot.activity}",
-        issue_list=issues,
-        metadata=[{"key": "snapshot_id", "value": snapshot.snapshot_id}],
-    )
+    return run_deterministic_report(snapshot)
 
 
 def save_source_reports(
