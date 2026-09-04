@@ -118,7 +118,7 @@ if __name__ == "__main__":
             app_activity=".MainActivity",
             capability_id=None,
             max_steps=5,
-            max_activities=20,
-            max_depth=10,
+            max_activities=1,
+            max_depth=0,
         )
     )

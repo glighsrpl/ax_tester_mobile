@@ -29,13 +29,13 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class StaticAnalysisResult:
-    """Aggregated reports and debug payloads for a mobile scan."""
+class AnalysisResult[ActivityReport]:
+    """Aggregated report data for a mobile scan."""
 
     report: Report
-    activity_reports: dict[str, "ActivityReports"]
+    activity_reports: dict[str, ActivityReport]
     issues_by_activity: dict[str, list[Issue]]
-    debug_data: list[dict[str, object]]
+    debug_data: list[dict[str, object]] | None
 
 
 @dataclass(frozen=True)
@@ -93,8 +93,8 @@ async def run_mobile_pipeline(
     navigator: SnapshotNavigator,
     static_agent: StaticAnalyzer,
     max_concurrent_analyses: int,
-) -> tuple[dict[str, object], StaticAnalysisResult]:
-    """Analyze streamed snapshots concurrently and aggregate their reports."""
+) -> tuple[dict[str, object], AnalysisResult[ActivityReports], AnalysisResult[Report]]:
+    """Analyze streamed snapshots and aggregate static and semantic reports."""
     queue: asyncio.Queue[tuple[int, MobileScanSnapshot] | None] = asyncio.Queue()
     async with asyncio.TaskGroup() as task_group:
         workers = [
@@ -113,7 +113,44 @@ async def run_mobile_pipeline(
         key=lambda analysis: analysis.snapshot_index,
     )
     navigator_data = navigator.result()
-    return navigator_data, await aggregate_static_analyses(analyses, navigator_data)
+    static_analysis = await aggregate_static_analyses(analyses, navigator_data)
+    semantic_analysis = await run_semantic_analysis(navigator_data)
+    return navigator_data, static_analysis, semantic_analysis
+
+
+async def run_semantic_analysis(navigator_data: Mapping[str, object]) -> AnalysisResult[Report]:
+    """Run the temporary semantic stub with each snapshot's screenshot and XML tree."""
+    snapshots = navigator_data.get("snapshots")
+    snapshot_items = snapshots if isinstance(snapshots, list) else []
+    semantic_inputs: list[tuple[object, object]] = []
+    activity_snapshot_counts: dict[str, int] = {}
+    for snapshot in snapshot_items:
+        if not isinstance(snapshot, Mapping):
+            continue
+        semantic_inputs.append((snapshot.get("screenshot"), snapshot.get("tree_xml")))
+        activity = str(snapshot.get("activity") or "unknown").strip() or "unknown"
+        activity_snapshot_counts[activity] = activity_snapshot_counts.get(activity, 0) + 1
+    activity_reports = {
+        activity: _empty_semantic_report(snapshot_count)
+        for activity, snapshot_count in activity_snapshot_counts.items()
+    }
+    return AnalysisResult(
+        report=_empty_semantic_report(len(semantic_inputs)),
+        activity_reports=activity_reports,
+        issues_by_activity={activity: [] for activity in activity_reports},
+        debug_data=None,
+    )
+
+
+def _empty_semantic_report(snapshot_count: int) -> Report:
+    issues: list[Issue] = []
+    return Report(
+        tool_name="semantic_image_analyzer",
+        total_issues=len(issues),
+        page="mobile",
+        issue_list=issues,
+        metadata=[{"key": "snapshots", "value": snapshot_count}],
+    )
 
 
 async def indexed_snapshots(
@@ -129,7 +166,7 @@ async def indexed_snapshots(
 async def aggregate_static_analyses(
     analyses: list[SnapshotAnalysis],
     navigator_data: Mapping[str, object],
-) -> StaticAnalysisResult:
+) -> AnalysisResult[ActivityReports]:
     """Create source, merged, and cross-screen reports independently per activity."""
     app_package = str(navigator_data.get("app_package") or "unknown")
     activity_reports = {
@@ -149,7 +186,7 @@ async def aggregate_static_analyses(
         activity_issues,
         "static",
     )
-    return StaticAnalysisResult(
+    return AnalysisResult(
         report=report,
         activity_reports=activity_reports,
         issues_by_activity=activity_issues,

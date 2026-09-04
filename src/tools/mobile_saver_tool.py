@@ -63,11 +63,17 @@ def save_mobile_report(
     capability_id: str,
     navigator_data: dict[str, Any],
     static_results: list[Any],
+    semantic_results: list[Any] | None = None,
 ) -> dict[str, Any]:
     report_id = _report_id(navigator_data, app_package)
     report_dir = _get_run_dir(report_id)
     reports = _build_screen_reports(
-        app_package, app_activity, capability_id, navigator_data, static_results, report_id
+        app_package,
+        app_activity,
+        capability_id,
+        navigator_data,
+        [*static_results, *(semantic_results or [])],
+        report_id,
     )
 
     results_file = report_dir / "results.json"
@@ -94,9 +100,8 @@ def run_save_mobile(state: MutableMapping[Any, Any]) -> dict[str, Any]:
     navigator_data = _state_dict(state, MobileContextKey.NAVIGATOR_DATA)
     if not navigator_data:
         raise ValueError("Missing mobile navigator data.")
-    static_results = _state_value(state, MobileContextKey.STATIC_RESULTS)
-    if isinstance(static_results, Mapping) and isinstance(static_results.get("issue_list"), list):
-        static_results = [{"result": static_results}]
+    static_results = _report_results(_state_value(state, MobileContextKey.STATIC_RESULTS))
+    semantic_results = _report_results(_state_value(state, MobileContextKey.SEMANTIC_RESULTS))
     static_debug_data = _state_value(state, MobileContextKey.STATIC_DEBUG_DATA)
 
     report_artifact = save_mobile_report(
@@ -104,10 +109,8 @@ def run_save_mobile(state: MutableMapping[Any, Any]) -> dict[str, Any]:
         app_activity=_state_str(state, MobileContextKey.APP_ACTIVITY),
         capability_id=_state_str(state, MobileContextKey.CAPABILITY_ID),
         navigator_data=navigator_data,
-        static_results=_with_static_debug(
-            static_results if isinstance(static_results, list) else [],
-            static_debug_data,
-        ),
+        static_results=_with_static_debug(static_results, static_debug_data),
+        semantic_results=semantic_results,
     )
     state[MobileContextKey.REPORT_ARTIFACT] = report_artifact
     state[str(MobileContextKey.REPORT_ARTIFACT)] = report_artifact
@@ -118,6 +121,12 @@ def _with_static_debug(static_results: list[Any], static_debug_data: Any) -> lis
     if not isinstance(static_debug_data, list):
         return static_results
     return [*static_results, {"debug": static_debug_data}]
+
+
+def _report_results(value: Any) -> list[Any]:
+    if isinstance(value, Mapping) and isinstance(value.get("issue_list"), list):
+        return [{"result": value}]
+    return value if isinstance(value, list) else []
 
 
 def _state_debug_payload(static_results: list[Any]) -> list[dict[str, Any]]:
@@ -155,7 +164,7 @@ def _build_screen_reports(
     for consumer in static_results:
         result = consumer.get("result", {}) if isinstance(consumer, Mapping) else {}
         activity_issues = result.get("issues_by_activity", {}) if isinstance(result, Mapping) else {}
-        if isinstance(activity_issues, Mapping) and "issues_by_activity" in result:
+        if isinstance(activity_issues, Mapping) and activity_issues:
             _append_activity_issues(issues_by_activity, activities, activity_issues)
             issue_list = []
         else:

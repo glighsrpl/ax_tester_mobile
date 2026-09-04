@@ -45,12 +45,14 @@ async def run_mobile_test(
     scan_result = await run_mobile_accessibility_scan(request)
     tool_context.state[MobileContextKey.NAVIGATOR_DATA] = scan_result.navigator_data
     tool_context.state[MobileContextKey.STATIC_RESULTS] = scan_result.static_results
+    tool_context.state[MobileContextKey.SEMANTIC_RESULTS] = scan_result.semantic_results
     tool_context.state[MobileContextKey.STATIC_DEBUG_DATA] = scan_result.static_debug_data
     return {
         "status": "success",
         "activities": scan_result.activities,
-        "final_response": "Mobile navigation and static analysis completed.",
+        "final_response": "Mobile navigation and analysis completed.",
         "static_results": scan_result.static_results,
+        "semantic_results": scan_result.semantic_results,
     }
 
 

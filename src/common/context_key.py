@@ -22,6 +22,7 @@ class MobileContextKey(StrEnum):
     LLM_REPORT = "mobile_llm_report"
     LOOP_REPORT = "mobile_loop_report"
     CROSS_SCREEN_REPORT = "mobile_cross_screen_report"
+    SEMANTIC_RESULTS = "mobile_semantic_results"
 
     # saved artifacts
     REPORT_ARTIFACT = "mobile_report_artifact"

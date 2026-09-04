@@ -1,16 +1,18 @@
-"""Deterministic MCP service for touch-based mobile accessibility scans."""
+"""Deterministic service for touch-based mobile accessibility scans."""
 
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
+from schemas import Report
 from tools.mobile_saver_tool import generate_run_timestamp
 from tools.mobile_screen_scanner import MobileScreenNavigator
 from utils.helpers import sanitize_label
 from utils.mobile_pipeline import (
     ActivityReports,
+    AnalysisResult,
     MobileStaticAnalyzer,
-    StaticAnalysisResult,
     run_mobile_pipeline,
 )
 from utils.mobile_report import save_source_reports
@@ -55,6 +57,7 @@ class MobileAccessibilityScanResult:
 
     navigator_data: dict[str, object]
     static_results: dict[str, object]
+    semantic_results: dict[str, object]
     static_debug_data: list[dict[str, object]]
     activities: int
 
@@ -97,30 +100,41 @@ async def _run_scan_pipeline(
             "screenshot_output_dir": str(REPORTS_ROOT / report_id / "screenshots"),
         }
     )
-    navigator_data, static_analysis = await run_mobile_pipeline(
+    navigator_data, static_analysis, semantic_analysis = await run_mobile_pipeline(
         navigator,
         MobileStaticAnalyzer(request.platform),
         MAX_CONCURRENT_STATIC_ANALYSES,
     )
-    return _build_scan_result(report_id, navigator_data, static_analysis)
+    return _build_scan_result(report_id, navigator_data, static_analysis, semantic_analysis)
 
 
 def _build_scan_result(
     report_id: str,
     navigator_data: dict[str, object],
-    static_analysis: StaticAnalysisResult,
+    static_analysis: AnalysisResult[ActivityReports],
+    semantic_analysis: AnalysisResult[Report],
 ) -> MobileAccessibilityScanResult:
     navigator_data["report_id"] = report_id
-    _save_activity_reports(REPORTS_ROOT / report_id / "static_reports", static_analysis.activity_reports)
+
+    _save_static_reports(REPORTS_ROOT / report_id / "static_reports", static_analysis.activity_reports)
     static_results = static_analysis.report.model_dump(mode="json")
     static_results["issues_by_activity"] = {
         activity: [issue.model_dump(mode="json") for issue in issues]
         for activity, issues in static_analysis.issues_by_activity.items()
     }
+
+    _save_semantic_report(REPORTS_ROOT / report_id / "semantic_reports", semantic_analysis.activity_reports)
+    semantic_results = semantic_analysis.report.model_dump(mode="json")
+    semantic_results["issues_by_activity"] = {
+        activity: [issue.model_dump(mode="json") for issue in issues]
+        for activity, issues in semantic_analysis.issues_by_activity.items()
+    }
+
     return MobileAccessibilityScanResult(
         navigator_data=navigator_data,
         static_results=static_results,
-        static_debug_data=static_analysis.debug_data,
+        semantic_results=semantic_results,
+        static_debug_data=static_analysis.debug_data or [],
         activities=_activity_count(navigator_data),
     )
 
@@ -130,7 +144,7 @@ def _activity_count(data: dict[str, object]) -> int:
     return len(activities) if isinstance(activities, list) else 0
 
 
-def _save_activity_reports(
+def _save_static_reports(
     report_dir: Path,
     activity_reports: Mapping[str, ActivityReports],
 ) -> None:
@@ -144,4 +158,15 @@ def _save_activity_reports(
             reports.llm,
             cross_screen=reports.cross_screen,
             merge=reports.merge,
+        )
+
+
+def _save_semantic_report(report_dir: Path, activity_reports: Mapping[str, Report]) -> None:
+    multiple_activities = len(activity_reports) > 1
+    for activity, report in activity_reports.items():
+        directory = report_dir / (sanitize_label(activity) or "mobile") if multiple_activities else report_dir
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "semantic_report.json").write_text(
+            json.dumps(report.model_dump(mode="json"), ensure_ascii=False, indent=2),
+            encoding="utf-8",
         )
