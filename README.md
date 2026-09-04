@@ -31,6 +31,85 @@ All final reports use the same `Report` schema:
 
 ## Static Analysis Agent
 
+## Semantic Analysis Agent
+
+The Semantic Analysis Agent (Mobile) checks whether images' `content_description` (Android) / `accessibilityLabel` (iOS) is semantically consistent with what the image depicts. It targets **WCAG 1.1.1 — Non-text Content (Level A)**. It runs a sequential pipeline orchestrated by an `LlmAgent` and outputs a single structured `Report`.
+
+### High-level pipeline
+
+```
+┌──────────────────────────────┐
+               │   Semantic Analysis Agent     │
+               │   (LlmAgent orchestrator)     │
+               └──────────────┬───────────────┘
+                              │
+                              │  xml_tree + screenshot
+                              v
+                ┌─────────────────────────────┐
+                │  Image Extractor            │
+                │  FunctionTool               │
+                │  (XML → image nodes +       │
+                │   content_description)      │
+                └──────────────┬──────────────┘
+                               │  images_inventory[]
+                               v
+                ┌─────────────────────────────┐
+                │  Image Cropper              │
+                │  FunctionTool               │
+                │  (screenshot + bounds       │
+                │   → base64 crops)           │
+                └──────────────┬──────────────┘
+                               │  cropped_images[]
+                               v
+                ┌─────────────────────────────┐
+                │  Caption Generator          │
+                │  AgentTool (LLM vision)     │
+                │  (caption per image)        │
+                └──────────────┬──────────────┘
+                               │  captions[]
+                               v
+                ┌─────────────────────────────┐
+                │  Similarity Verifier        │
+                │  AgentTool (LLM text)       │
+                │  (content_desc vs caption   │
+                │   → Report with issues)     │
+                └──────────────┬──────────────┘
+                               │  Report
+                               v
+                      Final Report (JSON)
+                      issues[] + scores
+```
+
+1. **Image Extractor** (`extract_images`) — FunctionTool. Parses the XML UI tree (UIAutomator / XCUITest), collects all image nodes (`ImageView`, `ImageButton`, Flutter generic views) and their `content_description`. Excludes decorative nodes (`importantForAccessibility=false`) and nodes below a minimum bounds threshold (10×10 px).
+2. **Image Cropper** (`crop_images`) — FunctionTool. Crops each image region from the screenshot using the extracted bounds. Clamps bounds to screenshot dimensions. Output: base64-encoded PNGs with index reference to inventory.
+3. **Caption Generator** (`caption_generator_agent`) — AgentTool (LLM vision). Generates a one-sentence descriptive caption for each cropped image.
+4. **Similarity Verifier** (`similarity_verifier_agent`) — AgentTool (LLM text). Evaluates semantic match between each `content_description` and generated `caption`. Lenient with cross-language matches (e.g., Italian description vs English caption). Builds and returns the final `Report` directly, including `Issue` list, scores, and metadata.
+
+### Issue classification
+
+| Condition | Status | Severity | Confidence |
+|-----------|--------|----------|------------|
+| `content_description` empty | `missing` | `critical` | `high` |
+| Description does not match caption | `mismatch` | `moderate` | `medium` / `high` |
+| Description matches caption | `pass` | — | — |
+
+### Output
+
+`Report` (same schema as static analysis) containing:
+- `tool_name`: `"semantic_image_analyzer"`
+- `issue_list`: one `Issue` per failing image (missing or mismatch)
+- `score_passed` / `score_total`: computed using `WCAG_LEVEL_WEIGHTS` (Level A = 3)
+- `wcag_rule`: `"1.1.1 - Non-text Content (Level A)"`
+
+### Platform support
+
+- **Android native** — `ImageView`, `ImageButton`, class names containing `Image`
+- **Flutter** — `android.view.View` with image-related `resource-id` (`image`, `icon`, `img`, `picture`)
+- **iOS** — Reserved (`NotImplementedError`)
+
+### Integration
+
+Invoked by `run_semantic_analysis()` in `src/utils/mobile_pipeline.py`, called after static analysis in `run_mobile_pipeline()`. Results are merged into the final `ax_report.json` and `results.json`.
 
 ## Installation and Usage
 Install environment and dependencies: `cd` in `ax_tester_mobile` directory, then:
