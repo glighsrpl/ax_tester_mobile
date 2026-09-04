@@ -8,7 +8,7 @@ from mobile_agents.semantic_agent.caption_generator_agent import caption_generat
 from mobile_agents.semantic_agent.tools.crop_images import crop_images
 from mobile_agents.semantic_agent.tools.extract_images import extract_images
 from mobile_agents.semantic_agent.tools.verify_similarity import verify_similarity
-from schemas import Issue, Report, ScoreInfo
+from schemas import Report
 from schemas.issues import WCAG_LEVEL_WEIGHTS
 from utils.wcag_helper import get_rule_name_from_axe_tags
 
