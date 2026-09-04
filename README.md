@@ -38,9 +38,9 @@ The Semantic Analysis Agent (Mobile) checks whether images' `content_description
 ### High-level pipeline
 
 ```
-┌──────────────────────────────┐
-               │   Semantic Analysis Agent     │
-               │   (LlmAgent orchestrator)     │
+               ┌──────────────────────────────┐
+               │   Semantic Analysis Agent    │
+               │   (LlmAgent orchestrator)    │
                └──────────────┬───────────────┘
                               │
                               │  xml_tree + screenshot
